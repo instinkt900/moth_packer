@@ -1,10 +1,5 @@
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#define STB_RECT_PACK_IMPLEMENTATION
-
 #include "packer.h"
 
-#include <moth_ui/moth_ui.h>
 #include <range/v3/algorithm/find_if.hpp>
 #include <range/v3/algorithm/remove_if.hpp>
 #include <nlohmann/json.hpp>
@@ -19,21 +14,17 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
-#include <limits>
+#include <unordered_set>
 #include <vector>
 
 namespace {
-    struct ImageDetails {
-        std::filesystem::path path;
-        moth_ui::IntVec2 dimensions;
-        int channels = 0;
-    };
+    std::unordered_set<std::string> const kSupportedExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tga" };
 
     // recursively loads all layouts in a given path
-    void CollectLayouts(std::filesystem::path const& path, std::vector<std::shared_ptr<moth_ui::Layout>>& layouts) {
+    void CollectLayouts(std::filesystem::path const& path, bool recursive, std::vector<std::shared_ptr<moth_ui::Layout>>& layouts) {
         for (auto&& entry : std::filesystem::directory_iterator(path)) {
-            if (std::filesystem::is_directory(entry.path())) {
-                CollectLayouts(entry.path(), layouts);
+            if (recursive && std::filesystem::is_directory(entry.path())) {
+                CollectLayouts(entry.path(), recursive, layouts);
             } else if (entry.path().has_extension() && entry.path().extension() == moth_ui::Layout::FullExtension) {
                 std::shared_ptr<moth_ui::Layout> layout;
                 auto const result = moth_ui::Layout::Load(entry.path(), &layout);
@@ -177,19 +168,132 @@ namespace {
     }
 }
 
-void Pack(std::filesystem::path const& inputPath, std::filesystem::path const& outputPath, std::string const& filename, int minWidth, int minHeight, int maxWidth, int maxHeight) {
-    if (!std::filesystem::exists(inputPath)) {
-        spdlog::error("Input path does not exist: {}", inputPath.string());
-        return;
+bool CollectImagesFromFile(std::filesystem::path const& inputList, std::vector<ImageDetails>& dstList) {
+    if (!std::filesystem::exists(inputList)) {
+        spdlog::error("Input path does not exist: {}", inputList.string());
+        return false;
     }
 
-    if (!std::filesystem::exists(outputPath)) {
-        spdlog::error("Output path does not exist: {}", outputPath.string());
-        return;
+    std::vector<ImageDetails> images;
+
+    std::ifstream file(inputList);
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        std::filesystem::path imagePath(line);
+        auto const ext = imagePath.extension().string();
+        if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
+            spdlog::warn("Unsupported image format, skipping: {}", line);
+            continue;
+        }
+        if (!std::filesystem::exists(imagePath)) {
+            spdlog::warn("Image not found, skipping: {}", line);
+            continue;
+        }
+        // skip duplicates
+        if (std::end(dstList) != ranges::find_if(dstList, [&](auto const& d) { return d.path == imagePath; })) {
+            continue;
+        }
+        ImageDetails details;
+        details.path = imagePath;
+        if (stbi_info(imagePath.string().c_str(), &details.dimensions.x, &details.dimensions.y, &details.channels) != 1) {
+            spdlog::warn("Failed to read image info: {}", line);
+            continue;
+        }
+        images.push_back(details);
+    }
+
+    if (images.empty()) {
+        spdlog::info("No images found in {}", inputList.string());
+        return false;
+    }
+
+    dstList.insert(std::end(dstList), std::begin(images), std::end(images));
+    return true;
+}
+
+bool CollectImagesFromDir(std::filesystem::path const& inputPath, bool const& recursive, std::vector<ImageDetails>& dstList) {
+    if (!std::filesystem::exists(inputPath)) {
+        spdlog::error("Input path does not exist: {}", inputPath.string());
+        return false;
+    }
+
+    std::vector<ImageDetails> images;
+
+    auto collectFromIterator = [&](auto&& iterator) {
+        for (auto&& entry : iterator) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+            auto const ext = entry.path().extension().string();
+            if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
+                continue;
+            }
+            auto const& imagePath = entry.path();
+            // skip duplicates
+            if (std::end(dstList) != ranges::find_if(dstList, [&](auto const& d) { return d.path == imagePath; })) {
+                continue;
+            }
+            ImageDetails details;
+            details.path = imagePath;
+            if (stbi_info(imagePath.string().c_str(), &details.dimensions.x, &details.dimensions.y, &details.channels) != 1) {
+                spdlog::warn("Failed to read image info: {}", imagePath.string());
+                continue;
+            }
+            images.push_back(details);
+        }
+    };
+
+    if (recursive) {
+        collectFromIterator(std::filesystem::recursive_directory_iterator(inputPath));
+    } else {
+        collectFromIterator(std::filesystem::directory_iterator(inputPath));
+    }
+
+    if (images.empty()) {
+        spdlog::info("No images found in {}", inputPath.string());
+        return false;
+    }
+
+    dstList.insert(std::end(dstList), std::begin(images), std::end(images));
+    return true;
+}
+
+bool CollectImagesFromLayout(std::filesystem::path const& inputLayout, std::vector<ImageDetails>& dstList) {
+    if (!std::filesystem::exists(inputLayout)) {
+        spdlog::error("Input layout does not exist: {}", inputLayout.string());
+        return false;
+    }
+
+    std::shared_ptr<moth_ui::Layout> layout;
+    auto const result = moth_ui::Layout::Load(inputLayout, &layout);
+    if (result != moth_ui::Layout::LoadResult::Success) {
+        spdlog::error("Failed to open layout: {}", inputLayout.string());
+        return false;
+    }
+
+    std::vector<ImageDetails> images;
+    CollectImages(*layout, images);
+
+    if (images.empty()) {
+        spdlog::info("No images found in {}", inputLayout.string());
+        return false;
+    }
+
+    dstList.insert(std::end(dstList), std::begin(images), std::end(images));
+    return true;
+}
+
+bool CollectImagesFromLayoutsDir(std::filesystem::path const& inputPath, bool recursive, std::vector<ImageDetails>& dstList) {
+    if (!std::filesystem::exists(inputPath)) {
+        spdlog::error("Input path does not exist: {}", inputPath.string());
+        return false;
     }
 
     std::vector<std::shared_ptr<moth_ui::Layout>> layouts;
-    CollectLayouts(inputPath, layouts);
+    CollectLayouts(inputPath, recursive, layouts);
 
     std::vector<ImageDetails> images;
     for (auto&& layout : layouts) {
@@ -198,6 +302,20 @@ void Pack(std::filesystem::path const& inputPath, std::filesystem::path const& o
 
     if (images.empty()) {
         spdlog::info("No images found in {}", inputPath.string());
+        return false;
+    }
+
+    dstList.insert(std::end(dstList), std::begin(images), std::end(images));
+    return true;
+}
+
+void Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputPath, std::string const& filename, int minWidth, int minHeight, int maxWidth, int maxHeight) {
+    if (images.empty()) {
+        spdlog::error("No images to pack!");
+        return;
+    }
+    if (!std::filesystem::exists(outputPath)) {
+        spdlog::error("Output path does not exist: {}", outputPath.string());
         return;
     }
 

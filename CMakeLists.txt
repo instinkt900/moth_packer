@@ -14,6 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(SOURCES
     src/main.cpp
     src/packer.cpp
+    src/stb_impl.c
 )
 
 find_package(moth_ui REQUIRED)

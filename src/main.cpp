@@ -1,42 +1,52 @@
 #include "packer.h"
 
 #include <CLI/CLI.hpp>
+#include <fmt/format.h>
 #include <filesystem>
 #include <iostream>
+#include <spdlog/spdlog.h>
 
 int main(int argc, char* argv[]) {
-    CLI::App app{"moth_packer — texture atlas packer for moth_ui layouts"};
+    CLI::App app{ "moth_packer — texture atlas packer for moth_ui layouts" };
     argv = app.ensure_utf8(argv);
 
-    std::filesystem::path inputPath;
-    std::filesystem::path outputPath;
     std::string outputName;
-    int minWidth = 256;
-    int minHeight = 256;
-    int maxWidth = 1024;
-    int maxHeight = 1024;
-
-    app.add_option("input", inputPath, "Path to directory containing .moth layout files")
-        ->required()
-        ->check(CLI::ExistingDirectory);
-
-    app.add_option("output", outputName, "Name of the pack to output.")
+    app.add_option("output", outputName, "Name of the pack to output (no extension).")
         ->required();
 
-    app.add_option("-d,--dir", outputPath, "Path to directory where packed atlases will be written")
+    std::filesystem::path inputTxt;
+    std::filesystem::path inputDir;
+    std::filesystem::path inputLayout;
+    std::filesystem::path inputLayoutDir;
+
+    auto* group = app.add_option_group("input source");
+    group->require_option(1);
+
+    auto* optionFile = group->add_option("-f,--file", inputTxt, "Input is given as a list of files in a txt file.")
+                           ->check(CLI::ExistingFile);
+    auto* optionDir = group->add_option("-d,--dir", inputDir, "Input is all files in a directory.")
+                          ->check(CLI::ExistingDirectory);
+    auto* optionLayout = group->add_option("-l,--layout", inputLayout, "Input is a single moth_ui layout file.")
+                             ->check(CLI::ExistingFile);
+    auto* optionLayoutDir = group->add_option("-x,--layout-dir", inputLayoutDir, "Input is a directory of moth_ui layout files.")
+                                ->check(CLI::ExistingDirectory);
+
+    bool recursiveInput = false;
+    app.add_flag("-r,--recursive", recursiveInput, "Recurse into subdirectories")
+        ->default_val(false);
+
+    std::filesystem::path outputDir;
+    app.add_option("-o,--out", outputDir, "Path to directory where packed atlases will be written")
         ->default_val(".");
 
-    app.add_option("--min-width", minWidth, "Min final pack width")
-        ->default_val(256);
+    std::pair<int, int> minDimensions{ 256, 256 };
+    std::pair<int, int> maxDimensions{ 4096, 4096 };
 
-    app.add_option("--min-height", minHeight, "Min final pack height")
-        ->default_val(256);
+    app.add_option("-n,--min", minDimensions, fmt::format("Min atlas dimensions w,h (default: {},{})", minDimensions.first, minDimensions.second))
+        ->delimiter(',');
 
-    app.add_option("--max-width", maxWidth, "Max final pack width")
-        ->default_val(1024);
-
-    app.add_option("--max-height", maxHeight, "Max final pack height")
-        ->default_val(1024);
+    app.add_option("-m,--max", maxDimensions, fmt::format("Max atlas dimensions w,h (default: {},{})", maxDimensions.first, maxDimensions.second))
+        ->delimiter(',');
 
     if (argc == 1) {
         std::cout << app.help();
@@ -45,9 +55,28 @@ int main(int argc, char* argv[]) {
 
     CLI11_PARSE(app, argc, argv);
 
-    std::filesystem::create_directories(outputPath);
+    std::vector<ImageDetails> images;
+    if (optionFile->count() != 0) {
+        CollectImagesFromFile(inputTxt, images);
+    } else if (optionDir->count() != 0) {
+        CollectImagesFromDir(inputDir, recursiveInput, images);
+    } else if (optionLayout->count() != 0) {
+        CollectImagesFromLayout(inputLayout, images);
+    } else if (optionLayoutDir->count() != 0) {
+        CollectImagesFromLayoutsDir(inputLayoutDir, recursiveInput, images);
+    } else {
+        spdlog::error("Unknown input source!");
+        return 1;
+    }
 
-    Pack(inputPath, outputPath, outputName, minWidth, minHeight, maxWidth, maxHeight);
+    if (images.empty()) {
+        spdlog::error("No images to pack!");
+        return 1;
+    }
+
+    std::filesystem::create_directories(outputDir);
+
+    Pack(images, outputDir, outputName, minDimensions.first, minDimensions.second, maxDimensions.first, maxDimensions.second);
 
     return 0;
 }
