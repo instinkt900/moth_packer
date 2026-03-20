@@ -114,7 +114,7 @@ namespace {
 
     // Composites packed rects into a PNG and returns the atlas JSON entry for the descriptor.
     // Erases packed rects from the list regardless of success.
-    nlohmann::json CommitPack(std::filesystem::path const& imagePngPath, std::filesystem::path const& outputPath, int width, int height, std::vector<stbrp_rect>& rects, std::vector<ImageDetails> const& images) {
+    nlohmann::json CommitPack(std::filesystem::path const& imagePngPath, std::filesystem::path const& outputPath, bool dryRun, int width, int height, std::vector<stbrp_rect>& rects, std::vector<ImageDetails> const& images) {
         int const atlasChannels = 4;
         std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels, 0);
 
@@ -150,8 +150,9 @@ namespace {
             spdlog::info("Packed {} into {}", relativePath.string(), imagePngPath.string());
         }
 
-        if (stbi_write_png(imagePngPath.string().c_str(), width, height, atlasChannels, atlasPixels.data(), width * atlasChannels) == 0) {
+        if (!dryRun && stbi_write_png(imagePngPath.string().c_str(), width, height, atlasChannels, atlasPixels.data(), width * atlasChannels) == 0) {
             spdlog::error("Failed to write atlas PNG: {}", imagePngPath.string());
+            return {};
         }
 
         rects.erase(ranges::remove_if(rects, [](auto const& r) { return r.was_packed != 0; }), std::end(rects));
@@ -304,14 +305,14 @@ bool CollectImagesFromLayoutsDir(std::filesystem::path const& inputPath, bool re
     return true;
 }
 
-void Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputPath, std::string const& filename, bool forceOverwrite, int minWidth, int minHeight, int maxWidth, int maxHeight) {
+bool Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputPath, std::string const& filename, bool forceOverwrite, bool dryRun, int minWidth, int minHeight, int maxWidth, int maxHeight) {
     if (images.empty()) {
         spdlog::error("No images to pack!");
-        return;
+        return false;
     }
     if (!std::filesystem::exists(outputPath)) {
         spdlog::error("Output path does not exist: {}", outputPath.string());
-        return;
+        return false;
     }
 
     std::vector<stbrp_rect> stbRects;
@@ -333,7 +334,7 @@ void Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputP
     auto const packDetailsPath = outputPath / fmt::format("{}.json", filename);
     if (!forceOverwrite && std::filesystem::exists(packDetailsPath)) {
         spdlog::error("Destination exists: {}", packDetailsPath.string());
-        return;
+        return false;
     }
 
     std::vector<stbrp_node> stbNodes(maxWidth * 2);
@@ -353,15 +354,24 @@ void Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputP
         stbrp_context stbContext;
         stbrp_init_target(&stbContext, packDim.x, packDim.y, stbNodes.data(), static_cast<int>(stbNodes.size()));
         stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
-        atlases.push_back(CommitPack(imagePngPath, outputPath, packDim.x, packDim.y, stbRects, images));
+        auto const atlasJson = CommitPack(imagePngPath, outputPath, dryRun, packDim.x, packDim.y, stbRects, images);
+        if (atlasJson.empty()) {
+            // empty return from commit pack means something bad happened
+            return false;
+        }
+        atlases.push_back(atlasJson);
     }
 
-    std::ofstream ofile(packDetailsPath);
-    if (ofile.is_open()) {
-        nlohmann::json root;
-        root["atlases"] = atlases;
-        ofile << root;
+    if (!dryRun) {
+        std::ofstream ofile(packDetailsPath);
+        if (ofile.is_open()) {
+            nlohmann::json root;
+            root["atlases"] = atlases;
+            ofile << root;
+        }
     }
 
     spdlog::info("Packed {} images into {} atlas{}", images.size(), numPacks, numPacks > 1 ? "es" : "");
+
+    return true;
 }

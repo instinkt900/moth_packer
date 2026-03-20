@@ -14,4 +14,4 @@ bool CollectImagesFromDir(std::filesystem::path const& inputPath, bool const& re
 bool CollectImagesFromLayout(std::filesystem::path const& inputLayout, std::vector<ImageDetails>& dstList);
 bool CollectImagesFromLayoutsDir(std::filesystem::path const& inputPath, bool recursive, std::vector<ImageDetails>& dstList);
 
-void Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputPath, std::string const& filename, bool forceOverwrite, int minWidth, int minHeight, int maxWidth, int maxHeight);
+bool Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputPath, std::string const& filename, bool forceOverwrite, bool dryRun, int minWidth, int minHeight, int maxWidth, int maxHeight);

@@ -55,12 +55,32 @@ int main(int argc, char* argv[]) {
     app.add_option("-m,--max", maxDimensions, fmt::format("Max atlas dimensions w,h (default: {},{})", maxDimensions.first, maxDimensions.second))
         ->delimiter(',');
 
+    bool verboseMode = false;
+    app.add_flag("--verbose", verboseMode, "Verbose mode. All output not just errors and warnings.")
+        ->default_val(false);
+
+    bool silentMode = false;
+    app.add_flag("--silent", silentMode, "Silent mode. No output.")
+        ->default_val(false);
+
+    bool dryRun = false;
+    app.add_flag("--dry-run", dryRun, "Dry run. No files written.")
+        ->default_val(false);
+
     if (argc == 1) {
         std::cout << app.help();
         return 0;
     }
 
     CLI11_PARSE(app, argc, argv);
+
+    if (verboseMode) {
+        spdlog::set_level(spdlog::level::trace);
+    } else if (silentMode) {
+        spdlog::set_level(spdlog::level::off);
+    } else {
+        spdlog::set_level(spdlog::level::warn);
+    }
 
     std::vector<ImageDetails> images;
     if (optionFile->count() != 0) {
@@ -83,7 +103,7 @@ int main(int argc, char* argv[]) {
 
     std::filesystem::create_directories(outputDir);
 
-    Pack(images, outputDir, outputName, forceOverwrite, minDimensions.first, minDimensions.second, maxDimensions.first, maxDimensions.second);
+    bool result = Pack(images, outputDir, outputName, forceOverwrite, dryRun, minDimensions.first, minDimensions.second, maxDimensions.first, maxDimensions.second);
 
-    return 0;
+    return result ? 0 : 1;
 }
