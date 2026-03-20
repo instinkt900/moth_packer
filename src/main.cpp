@@ -77,7 +77,8 @@ int main(int argc, char* argv[]) {
     if (verboseMode) {
         spdlog::set_level(spdlog::level::trace);
     } else if (silentMode) {
-        spdlog::set_level(spdlog::level::off);
+        // should silent mode silence ALL info? I feel like errors should always be visible.
+        spdlog::set_level(spdlog::level::err);
     } else {
         spdlog::set_level(spdlog::level::warn);
     }

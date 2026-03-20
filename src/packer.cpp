@@ -98,6 +98,11 @@ namespace {
             curWidth *= 2;
         }
 
+        // total area exceeds max atlas size — use the largest available to pack as many as possible
+        if (testDimensions.empty()) {
+            return { maxDimX, maxDimY };
+        }
+
         for (auto&& testDim : testDimensions) {
             stbrp_context stbContext;
             stbrp_init_target(&stbContext, testDim.m_dimensions.x, testDim.m_dimensions.y, nodes.data(), static_cast<int>(nodes.size()));
@@ -109,6 +114,12 @@ namespace {
         }
 
         std::sort(std::begin(testDimensions), std::end(testDimensions), [](auto const& a, auto const& b) { return b.m_ratio < a.m_ratio; });
+
+        // no single dimension fit all rects — use the largest to pack as many as possible
+        if (std::begin(testDimensions)->m_ratio == 0.0f) {
+            return { maxDimX, maxDimY };
+        }
+
         return std::begin(testDimensions)->m_dimensions;
     }
 
@@ -345,7 +356,8 @@ bool Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputP
         auto const imagePngPath = outputPath / fmt::format("{}_{}.png", filename, numPacks);
 
         if (!forceOverwrite && std::filesystem::exists(imagePngPath)) {
-            spdlog::error("Destination exists: {}", imagePngPath.string());
+            // previously an error, but downgraded to a warning since we still continue.
+            spdlog::warn("Destination exists: {}", imagePngPath.string());
             continue;
         }
 
