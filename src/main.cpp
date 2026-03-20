@@ -9,7 +9,8 @@
 int main(int argc, char* argv[]) {
     spdlog::set_pattern("%v");
 
-    CLI::App app{ "moth_packer — texture atlas packer for moth_ui layouts" };
+    CLI::App app{ fmt::format("moth_packer {} — texture atlas packer for moth_ui layouts", MOTH_PACKER_VERSION) };
+    app.set_version_flag("-v,--version", MOTH_PACKER_VERSION);
     argv = app.ensure_utf8(argv);
 
     std::string outputName;
