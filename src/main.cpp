@@ -10,6 +10,7 @@ int main(int argc, char* argv[]) {
 
     std::filesystem::path inputPath;
     std::filesystem::path outputPath;
+    std::string outputName;
     int minWidth = 256;
     int minHeight = 256;
     int maxWidth = 1024;
@@ -19,8 +20,11 @@ int main(int argc, char* argv[]) {
         ->required()
         ->check(CLI::ExistingDirectory);
 
-    app.add_option("output", outputPath, "Path to directory where packed atlases will be written")
+    app.add_option("output", outputName, "Name of the pack to output.")
         ->required();
+
+    app.add_option("-d,--dir", outputPath, "Path to directory where packed atlases will be written")
+        ->default_val(".");
 
     app.add_option("--min-width", minWidth, "Min final pack width")
         ->default_val(256);
@@ -43,7 +47,7 @@ int main(int argc, char* argv[]) {
 
     std::filesystem::create_directories(outputPath);
 
-    Pack(inputPath, outputPath, minWidth, minHeight, maxWidth, maxHeight);
+    Pack(inputPath, outputPath, outputName, minWidth, minHeight, maxWidth, maxHeight);
 
     return 0;
 }

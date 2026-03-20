@@ -121,7 +121,7 @@ namespace {
         return std::begin(testDimensions)->m_dimensions;
     }
 
-    void CommitPack(int num, std::filesystem::path const& outputPath, int width, int height, std::vector<stbrp_rect>& rects, std::vector<ImageDetails> const& images) {
+    void CommitPack(int num, std::filesystem::path const& outputPath, std::string const& filename, int width, int height, std::vector<stbrp_rect>& rects, std::vector<ImageDetails> const& images) {
         int const atlasChannels = 4;
         std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels, 0);
 
@@ -157,14 +157,14 @@ namespace {
         }
 
         // save atlas PNG
-        auto const imagePackName = fmt::format("packed_{}.png", num);
+        auto const imagePackName = fmt::format("{}_{}.png", filename, num);
         auto const imagePngPath = outputPath / imagePackName;
         if (stbi_write_png(imagePngPath.string().c_str(), width, height, atlasChannels, atlasPixels.data(), width * atlasChannels) == 0) {
             spdlog::error("Failed to write atlas PNG: {}", imagePngPath.string());
         }
 
         // save descriptor JSON
-        auto const packDetailsName = fmt::format("packed_{}.json", num);
+        auto const packDetailsName = fmt::format("{}_{}.json", filename, num);
         std::ofstream ofile(outputPath / packDetailsName);
         if (ofile.is_open()) {
             nlohmann::json detailsRoot;
@@ -177,9 +177,14 @@ namespace {
     }
 }
 
-void Pack(std::filesystem::path const& inputPath, std::filesystem::path const& outputPath, int minWidth, int minHeight, int maxWidth, int maxHeight) {
+void Pack(std::filesystem::path const& inputPath, std::filesystem::path const& outputPath, std::string const& filename, int minWidth, int minHeight, int maxWidth, int maxHeight) {
     if (!std::filesystem::exists(inputPath)) {
         spdlog::error("Input path does not exist: {}", inputPath.string());
+        return;
+    }
+
+    if (!std::filesystem::exists(outputPath)) {
+        spdlog::error("Output path does not exist: {}", outputPath.string());
         return;
     }
 
@@ -221,7 +226,7 @@ void Pack(std::filesystem::path const& inputPath, std::filesystem::path const& o
         stbrp_context stbContext;
         stbrp_init_target(&stbContext, packDim.x, packDim.y, stbNodes.data(), static_cast<int>(stbNodes.size()));
         stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
-        CommitPack(numPacks, outputPath, packDim.x, packDim.y, stbRects, images);
+        CommitPack(numPacks, outputPath, filename, packDim.x, packDim.y, stbRects, images);
         ++numPacks;
     }
 
