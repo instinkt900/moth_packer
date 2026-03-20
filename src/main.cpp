@@ -7,6 +7,8 @@
 #include <spdlog/spdlog.h>
 
 int main(int argc, char* argv[]) {
+    spdlog::set_pattern("%v");
+
     CLI::App app{ "moth_packer — texture atlas packer for moth_ui layouts" };
     argv = app.ensure_utf8(argv);
 
@@ -22,7 +24,7 @@ int main(int argc, char* argv[]) {
     auto* group = app.add_option_group("input source");
     group->require_option(1);
 
-    auto* optionFile = group->add_option("-f,--file", inputTxt, "Input is given as a list of files in a txt file.")
+    auto* optionFile = group->add_option("-i,--file", inputTxt, "Input is given as a list of files in a txt file.")
                            ->check(CLI::ExistingFile);
     auto* optionDir = group->add_option("-d,--dir", inputDir, "Input is all files in a directory.")
                           ->check(CLI::ExistingDirectory);
@@ -33,6 +35,10 @@ int main(int argc, char* argv[]) {
 
     bool recursiveInput = false;
     app.add_flag("-r,--recursive", recursiveInput, "Recurse into subdirectories")
+        ->default_val(false);
+
+    bool forceOverwrite = false;
+    app.add_flag("-f,--force", forceOverwrite, "Force overwritting of output.")
         ->default_val(false);
 
     std::filesystem::path outputDir;
@@ -76,7 +82,7 @@ int main(int argc, char* argv[]) {
 
     std::filesystem::create_directories(outputDir);
 
-    Pack(images, outputDir, outputName, minDimensions.first, minDimensions.second, maxDimensions.first, maxDimensions.second);
+    Pack(images, outputDir, outputName, forceOverwrite, minDimensions.first, minDimensions.second, maxDimensions.first, maxDimensions.second);
 
     return 0;
 }

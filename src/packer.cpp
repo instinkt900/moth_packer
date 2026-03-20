@@ -112,7 +112,7 @@ namespace {
         return std::begin(testDimensions)->m_dimensions;
     }
 
-    void CommitPack(int num, std::filesystem::path const& outputPath, std::string const& filename, int width, int height, std::vector<stbrp_rect>& rects, std::vector<ImageDetails> const& images) {
+    bool CommitPack(std::filesystem::path const& imagePngPath, std::filesystem::path const& packDetailsPath, int width, int height, std::vector<stbrp_rect>& rects, std::vector<ImageDetails> const& images) {
         int const atlasChannels = 4;
         std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels, 0);
 
@@ -141,22 +141,18 @@ namespace {
             stbi_image_free(srcPixels);
 
             nlohmann::json details;
-            auto const relativePath = std::filesystem::relative(imagePath, outputPath);
+            auto const relativePath = std::filesystem::relative(imagePath, packDetailsPath.parent_path());
             details["path"] = relativePath.string();
             details["rect"] = { { "x", rect.x }, { "y", rect.y }, { "w", rect.w }, { "h", rect.h } };
             packDetails.push_back(details);
+            spdlog::info("Packed {}", imagePath.string());
         }
 
-        // save atlas PNG
-        auto const imagePackName = fmt::format("{}_{}.png", filename, num);
-        auto const imagePngPath = outputPath / imagePackName;
         if (stbi_write_png(imagePngPath.string().c_str(), width, height, atlasChannels, atlasPixels.data(), width * atlasChannels) == 0) {
             spdlog::error("Failed to write atlas PNG: {}", imagePngPath.string());
         }
 
-        // save descriptor JSON
-        auto const packDetailsName = fmt::format("{}_{}.json", filename, num);
-        std::ofstream ofile(outputPath / packDetailsName);
+        std::ofstream ofile(packDetailsPath);
         if (ofile.is_open()) {
             nlohmann::json detailsRoot;
             detailsRoot["images"] = packDetails;
@@ -165,6 +161,8 @@ namespace {
 
         // remove packed rects
         rects.erase(ranges::remove_if(rects, [](auto const& r) { return r.was_packed != 0; }), std::end(rects));
+
+        return true;
     }
 }
 
@@ -309,7 +307,7 @@ bool CollectImagesFromLayoutsDir(std::filesystem::path const& inputPath, bool re
     return true;
 }
 
-void Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputPath, std::string const& filename, int minWidth, int minHeight, int maxWidth, int maxHeight) {
+void Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputPath, std::string const& filename, bool forceOverwrite, int minWidth, int minHeight, int maxWidth, int maxHeight) {
     if (images.empty()) {
         spdlog::error("No images to pack!");
         return;
@@ -344,7 +342,16 @@ void Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputP
         stbrp_context stbContext;
         stbrp_init_target(&stbContext, packDim.x, packDim.y, stbNodes.data(), static_cast<int>(stbNodes.size()));
         stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
-        CommitPack(numPacks, outputPath, filename, packDim.x, packDim.y, stbRects, images);
+
+        auto const imagePngPath = outputPath / fmt::format("{}_{}.png", filename, numPacks);
+        auto const packDetailsPath = outputPath / fmt::format("{}_{}.json", filename, numPacks);
+
+        if (!forceOverwrite && (std::filesystem::exists(imagePngPath) || std::filesystem::exists(packDetailsPath))) {
+            auto const& conflicting = std::filesystem::exists(imagePngPath) ? imagePngPath : packDetailsPath;
+            spdlog::error("Destination exists: {}", conflicting.string());
+        } else {
+            CommitPack(imagePngPath, packDetailsPath, packDim.x, packDim.y, stbRects, images);
+        }
         ++numPacks;
     }
 
