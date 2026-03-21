@@ -1,0 +1,53 @@
+name: Build and Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'conanfile.py'
+      - 'version.txt'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'conanfile.py'
+      - 'version.txt'
+
+jobs:
+  build-test:
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      matrix:
+        include:
+          - os: windows
+            runs_on: windows-latest
+            configure_preset: conan-default
+          - os: linux
+            runs_on: ubuntu-latest
+            configure_preset: conan-release
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Conan
+      uses: conan-io/setup-conan@v1
+      with:
+        cache_packages: true
+
+    - name: Add private artifactory
+      run: |
+        conan remote add artifactory ${{ secrets.ARTIFACTORY_URL }} --force
+        conan remote login artifactory ci -p ${{ secrets.ARTIFACTS_TOKEN }}
+
+    - name: Configure and build
+      shell: bash
+      run: |
+        conan install . -s compiler.cppstd=17 -s build_type=Release --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=true
+        cmake --preset ${{ matrix.configure_preset }}
+        cmake --build --preset conan-release --config Release
