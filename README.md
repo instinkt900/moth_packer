@@ -1,5 +1,7 @@
 # Moth Packer
 
+[![Build and Test](https://github.com/instinkt900/moth_packer/actions/workflows/build-test.yml/badge.svg)](https://github.com/instinkt900/moth_packer/actions/workflows/build-test.yml)
+[![Release](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml/badge.svg)](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A standalone command-line tool for packing images into texture atlases. Supports plain image directories, file lists, and [moth_ui](https://github.com/instinkt900/moth_ui) layout files as input sources. Outputs a single JSON descriptor alongside one or more atlas PNGs.
