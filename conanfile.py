@@ -16,7 +16,7 @@ class MothPacker(ConanFile):
         self.version = load(self, "version.txt").strip()
 
     def requirements(self):
-        self.requires("moth_ui/1.1.0")
+        self.requires("moth_ui/1.1.1")
         self.requires("cli11/2.4.2")
         self.requires("spdlog/[~1.14]")
 

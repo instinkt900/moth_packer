@@ -145,12 +145,10 @@ python3 -m venv .venv
 pip install conan
 ```
 
-Conan profiles for both platforms are provided in `conan/profiles/`.
-
 ### Linux
 
 ```bash
-conan install . --profile conan/profiles/linux_profile --build=missing -s build_type=Release
+conan install . -s compiler.cppstd=17 -s build_type=Release --build=missing
 cmake --preset conan-release
 cmake --build --preset conan-release
 ```
@@ -158,7 +156,7 @@ cmake --build --preset conan-release
 ### Windows
 
 ```bash
-conan install . --profile conan/profiles/windows_profile --build=missing -s build_type=Release
+conan install . -s compiler.cppstd=17 -s build_type=Release --build=missing
 cmake --preset conan-default
 cmake --build --preset conan-release
 ```
