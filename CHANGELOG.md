@@ -3,12 +3,23 @@
 All notable changes to this project will be documented in this file.
 Entries are generated automatically from git history using [git-cliff](https://github.com/orhun/git-cliff).
 
+## [0.2.0] - 2026-03-22
+### Bug Fixes
+- Fetch tags after creation so git-cliff --current finds the tag
+
+### Changes
+- Clarify build instructions in README.md
+
 ## [0.1.1] - 2026-03-22
 ### Bug Fixes
 - Use PID in TempDir names to prevent parallel test collisions
 - Check stbi_write_png result and pass explicit Debug config to cmake/ctest
 - Mark TempDir destructor noexcept
 - Validate positive dimensions in MakeTestImage
+- Restore cli11 conan requirement for local CLI builds
+- Complete install rules for library export and CLI executable
+- Add using moth_packer::Pack to test file for unqualified calls
+- Explicitly declare moth_packer as STATIC library
 
 ### Changes
 - Use repository variable for ARTIFACTORY_URL
@@ -24,6 +35,14 @@ Entries are generated automatically from git history using [git-cliff](https://g
 - Add JSON path tests and silence spdlog during tests
 - Add Collect tests and fix duplicate detection bug
 - Add additional Pack and Collect tests
+- Add build_cli conan option, default false
+
+### Miscellaneous
+- Bump version to 0.2.0
+
+### Refactoring
+- Split moth_packer into library and CLI, add moth_packer namespace
+- Gate CLI build and CLI11 dep behind MOTH_PACKER_BUILD_CLI option
 
 ### Testing
 - Fixed small issue by using non-throwing version of remove_all
