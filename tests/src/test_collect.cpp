@@ -164,6 +164,37 @@ TEST_CASE("CollectImagesFromLayout collects images referenced by layout", "[coll
     CHECK(dst[0].path == img.path);
 }
 
+TEST_CASE("CollectImagesFromLayout returns false for corrupt layout file", "[collect][layout]") {
+    TempDir dir;
+    auto const layoutPath = dir.path / ("corrupt" + moth_ui::Layout::FullExtension);
+    std::ofstream(layoutPath) << "this is not valid json {{{";
+
+    std::vector<ImageDetails> dst;
+    CHECK_FALSE(CollectImagesFromLayout(layoutPath, dst));
+    CHECK(dst.empty());
+}
+
+TEST_CASE("CollectImagesFromLayout returns false when referenced image is missing on disk", "[collect][layout]") {
+    TempDir dir;
+    auto const missingImagePath = dir.path / "missing.png"; // never created
+    auto const layoutPath = MakeTestLayout(dir.path, "test", { missingImagePath });
+
+    std::vector<ImageDetails> dst;
+    CHECK_FALSE(CollectImagesFromLayout(layoutPath, dst));
+    CHECK(dst.empty());
+}
+
+TEST_CASE("CollectImagesFromLayout collects multiple distinct images", "[collect][layout]") {
+    TempDir dir;
+    auto const imgA = MakeTestImage(dir.path, "a.png", 16, 16);
+    auto const imgB = MakeTestImage(dir.path, "b.png", 32, 32);
+    auto const layoutPath = MakeTestLayout(dir.path, "test", { imgA.path, imgB.path });
+
+    std::vector<ImageDetails> dst;
+    REQUIRE(CollectImagesFromLayout(layoutPath, dst));
+    CHECK(dst.size() == 2);
+}
+
 TEST_CASE("CollectImagesFromLayout skips duplicate images across entities", "[collect][layout]") {
     TempDir dir;
     auto const img = MakeTestImage(dir.path, "a.png", 16, 16);
@@ -216,6 +247,28 @@ TEST_CASE("CollectImagesFromLayoutsDir non-recursive does not enter subdirectori
 
     std::vector<ImageDetails> dst;
     CHECK_FALSE(CollectImagesFromLayoutsDir(dir.path, false, dst));
+}
+
+TEST_CASE("CollectImagesFromLayoutsDir deduplicates images shared across layouts", "[collect][layouts_dir]") {
+    TempDir dir;
+    auto const img = MakeTestImage(dir.path, "a.png", 16, 16);
+    MakeTestLayout(dir.path, "layout1", { img.path });
+    MakeTestLayout(dir.path, "layout2", { img.path });
+
+    std::vector<ImageDetails> dst;
+    REQUIRE(CollectImagesFromLayoutsDir(dir.path, false, dst));
+    CHECK(dst.size() == 1);
+}
+
+TEST_CASE("CollectImagesFromLayoutsDir skips corrupt layouts and collects from valid ones", "[collect][layouts_dir]") {
+    TempDir dir;
+    auto const img = MakeTestImage(dir.path, "a.png", 16, 16);
+    MakeTestLayout(dir.path, "valid", { img.path });
+    std::ofstream(dir.path / ("corrupt" + moth_ui::Layout::FullExtension)) << "not valid json {{{";
+
+    std::vector<ImageDetails> dst;
+    REQUIRE(CollectImagesFromLayoutsDir(dir.path, false, dst));
+    CHECK(dst.size() == 1);
 }
 
 TEST_CASE("CollectImagesFromLayoutsDir recursive enters subdirectories", "[collect][layouts_dir]") {

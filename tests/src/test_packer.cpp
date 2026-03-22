@@ -101,6 +101,37 @@ TEST_CASE("Pack produces multiple atlases when images do not fit in one", "[pack
     CHECK(std::filesystem::exists(out.path / "test_2.png"));
 }
 
+TEST_CASE("Pack returns true with empty atlases when all images exceed max dimensions", "[pack]") {
+    TempDir src;
+    TempDir out;
+
+    // image is 64x64 but max atlas is 32x32
+    std::vector<ImageDetails> images = { MakeTestImage(src.path, "big.png", 64, 64) };
+
+    CHECK(Pack(images, out.path, "test", false, false, 32, 32, 32, 32));
+    REQUIRE(std::filesystem::exists(out.path / "test.json"));
+    std::ifstream f(out.path / "test.json");
+    CHECK(nlohmann::json::parse(f)["atlases"].empty());
+    CHECK_FALSE(std::filesystem::exists(out.path / "test_0.png"));
+}
+
+TEST_CASE("Pack JSON rect values match image dimensions and are within atlas bounds", "[pack]") {
+    TempDir src;
+    TempDir out;
+    auto const image = MakeTestImage(src.path, "a.png", 16, 32);
+
+    REQUIRE(Pack({ image }, out.path, "test", false, false, 256, 256, 4096, 4096));
+
+    std::ifstream f(out.path / "test.json");
+    auto const json = nlohmann::json::parse(f);
+    auto const& rect = json["atlases"][0]["images"][0]["rect"];
+
+    CHECK(rect["x"].get<int>() >= 0);
+    CHECK(rect["y"].get<int>() >= 0);
+    CHECK(rect["w"].get<int>() == 16);
+    CHECK(rect["h"].get<int>() == 32);
+}
+
 TEST_CASE("Pack JSON descriptor contains correct relative paths", "[pack]") {
     // root/
     //   out/      <- output directory
