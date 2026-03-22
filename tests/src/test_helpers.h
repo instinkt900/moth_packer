@@ -42,6 +42,9 @@ struct TempDir {
 
 // Write a solid-colour RGBA PNG of the given dimensions and return an ImageDetails for it
 inline ImageDetails MakeTestImage(std::filesystem::path const& dir, std::string const& name, int width, int height) {
+    if (width <= 0 || height <= 0) {
+        throw std::invalid_argument("MakeTestImage: width and height must be positive");
+    }
     auto const filePath = dir / name;
     int const channels = 4;
     std::vector<uint8_t> pixels(static_cast<size_t>(width) * height * channels, 255);
