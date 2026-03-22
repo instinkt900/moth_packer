@@ -8,9 +8,16 @@
 #include <moth_ui/layout/layout_entity_image.h>
 #include <moth_ui/layout/layout_rect.h>
 
+#ifdef _WIN32
+#include <process.h>
+#define MOTH_PACKER_TESTS_PID() _getpid()
+#else
+#include <unistd.h>
+#define MOTH_PACKER_TESTS_PID() getpid()
+#endif
+
 #include <atomic>
 #include <filesystem>
-#include <vector>
 
 // RAII temporary directory — created on construction, recursively deleted on destruction
 struct TempDir {
@@ -18,7 +25,8 @@ struct TempDir {
 
     TempDir() {
         static std::atomic<int> s_counter{ 0 };
-        auto const name = "moth_packer_tests_" + std::to_string(++s_counter);
+        // Include PID so parallel CTest processes (each starting counter at 0) don't collide
+        auto const name = "moth_packer_tests_" + std::to_string(MOTH_PACKER_TESTS_PID()) + "_" + std::to_string(++s_counter);
         path = std::filesystem::temp_directory_path() / name;
         std::filesystem::create_directories(path);
     }
