@@ -33,7 +33,8 @@ struct TempDir {
     }
 
     ~TempDir() noexcept {
-        std::filesystem::remove_all(path);
+        std::error_code ec;
+        std::filesystem::remove_all(path, ec);
     }
 
     TempDir(TempDir const&) = delete;
