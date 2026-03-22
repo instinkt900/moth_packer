@@ -170,7 +170,9 @@ cmake --build --preset conan-release
 | Project | Description |
 |---|---|
 | [moth_ui](https://github.com/instinkt900/moth_ui) | Core UI library — node graph, keyframe animation, and event system |
-| [moth_editor](https://github.com/instinkt900/moth_editor) | Visual layout and animation editor with built-in texture packing |
+| [canyon](https://github.com/instinkt900/canyon) | Graphics and application framework built on moth_ui — SDL2 and Vulkan backends, window management, and a layer stack |
+| [moth_editor](https://github.com/instinkt900/moth_editor) | Visual layout and animation editor — Flash-like authoring tool for creating moth_ui layout files |
+| moth_packer | *(this project)* Command-line texture atlas packer for images and moth_ui layouts |
 
 ---
 
