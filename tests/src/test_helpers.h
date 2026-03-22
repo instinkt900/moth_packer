@@ -32,7 +32,7 @@ struct TempDir {
         std::filesystem::create_directories(path);
     }
 
-    ~TempDir() {
+    ~TempDir() noexcept {
         std::filesystem::remove_all(path);
     }
 
