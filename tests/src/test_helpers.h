@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <filesystem>
+#include <stdexcept>
 
 // RAII temporary directory — created on construction, recursively deleted on destruction
 struct TempDir {
@@ -44,7 +45,9 @@ inline ImageDetails MakeTestImage(std::filesystem::path const& dir, std::string 
     auto const filePath = dir / name;
     int const channels = 4;
     std::vector<uint8_t> pixels(static_cast<size_t>(width) * height * channels, 255);
-    stbi_write_png(filePath.string().c_str(), width, height, channels, pixels.data(), width * channels);
+    if (stbi_write_png(filePath.string().c_str(), width, height, channels, pixels.data(), width * channels) == 0) {
+        throw std::runtime_error("MakeTestImage: failed to write PNG: " + filePath.string());
+    }
 
     ImageDetails details;
     details.path = filePath;

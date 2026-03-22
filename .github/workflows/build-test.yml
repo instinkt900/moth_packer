@@ -84,5 +84,5 @@ jobs:
         conan remote login artifactory ci -p ${{ secrets.ARTIFACTS_TOKEN }}
         conan install . -s compiler.cppstd=17 -s build_type=Debug --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=true
         cmake --preset ${{ matrix.configure_preset }}
-        cmake --build --preset conan-debug
-        ctest --preset conan-debug --output-on-failure
+        cmake --build --preset conan-debug --config Debug
+        ctest --preset conan-debug --build-config Debug --output-on-failure
