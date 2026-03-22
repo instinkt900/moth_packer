@@ -4,9 +4,20 @@
 
 #include "stb_image_write.h"
 
+#include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
+
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+
+struct SilenceSpdlog : Catch::EventListenerBase {
+    using EventListenerBase::EventListenerBase;
+    void testRunStarting(Catch::TestRunInfo const& /*info*/) override {
+        spdlog::set_level(spdlog::level::off);
+    }
+};
+CATCH_REGISTER_LISTENER(SilenceSpdlog)
 
 namespace {
     // RAII temporary directory — created on construction, recursively deleted on destruction
@@ -125,4 +136,45 @@ TEST_CASE("Pack produces multiple atlases when images do not fit in one", "[pack
     CHECK(std::filesystem::exists(out.path / "test_0.png"));
     CHECK(std::filesystem::exists(out.path / "test_1.png"));
     CHECK(std::filesystem::exists(out.path / "test_2.png"));
+}
+
+TEST_CASE("Pack JSON descriptor contains correct relative paths", "[pack]") {
+    // root/
+    //   out/      <- output directory
+    TempDir root;
+    auto const outPath = root.path / "out";
+    std::filesystem::create_directories(outPath);
+
+    ImageDetails image;
+
+    SECTION("image in same directory as output") {
+        image = MakeTestImage(outPath, "a.png", 16, 16);
+    }
+
+    SECTION("image in subdirectory of output") {
+        std::filesystem::create_directories(outPath / "sub");
+        image = MakeTestImage(outPath / "sub", "a.png", 16, 16);
+    }
+
+    SECTION("image in parent directory of output") {
+        image = MakeTestImage(root.path, "a.png", 16, 16);
+    }
+
+    REQUIRE(Pack({ image }, outPath, "test", false, false, 256, 256, 4096, 4096));
+
+    std::ifstream f(outPath / "test.json");
+    auto const json = nlohmann::json::parse(f);
+
+    auto const& atlases = json["atlases"];
+    REQUIRE(atlases.size() == 1);
+
+    CHECK(atlases[0]["atlas"] == "test_0.png");
+
+    auto const& images = atlases[0]["images"];
+    REQUIRE(images.size() == 1);
+
+    // image path should be relative to the output directory and resolve back to the source file
+    auto const relPath = std::filesystem::path(images[0]["path"].get<std::string>());
+    auto const resolvedPath = std::filesystem::weakly_canonical(outPath / relPath);
+    CHECK(resolvedPath == std::filesystem::weakly_canonical(image.path));
 }
