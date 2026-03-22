@@ -1,4 +1,4 @@
-#include "packer.h"
+#include "moth_packer/packer.h"
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
@@ -83,15 +83,15 @@ int main(int argc, char* argv[]) {
         spdlog::set_level(spdlog::level::warn);
     }
 
-    std::vector<ImageDetails> images;
+    std::vector<moth_packer::ImageDetails> images;
     if (optionFile->count() != 0) {
-        CollectImagesFromFile(inputTxt, images);
+        moth_packer::CollectImagesFromFile(inputTxt, images);
     } else if (optionDir->count() != 0) {
-        CollectImagesFromDir(inputDir, recursiveInput, images);
+        moth_packer::CollectImagesFromDir(inputDir, recursiveInput, images);
     } else if (optionLayout->count() != 0) {
-        CollectImagesFromLayout(inputLayout, images);
+        moth_packer::CollectImagesFromLayout(inputLayout, images);
     } else if (optionLayoutDir->count() != 0) {
-        CollectImagesFromLayoutsDir(inputLayoutDir, recursiveInput, images);
+        moth_packer::CollectImagesFromLayoutsDir(inputLayoutDir, recursiveInput, images);
     } else {
         spdlog::error("Unknown input source!");
         return 1;
@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
 
     std::filesystem::create_directories(outputDir);
 
-    bool result = Pack(images, outputDir, outputName, forceOverwrite, dryRun, minDimensions.first, minDimensions.second, maxDimensions.first, maxDimensions.second);
+    bool result = moth_packer::Pack(images, outputDir, outputName, forceOverwrite, dryRun, minDimensions.first, minDimensions.second, maxDimensions.first, maxDimensions.second);
 
     return result ? 0 : 1;
 }

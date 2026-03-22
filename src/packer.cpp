@@ -1,4 +1,4 @@
-#include "packer.h"
+#include "moth_packer/packer.h"
 
 #include <range/v3/algorithm/find_if.hpp>
 #include <range/v3/algorithm/remove_if.hpp>
@@ -16,6 +16,8 @@
 #include <fstream>
 #include <unordered_set>
 #include <vector>
+
+namespace moth_packer {
 
 namespace {
     std::unordered_set<std::string> const kSupportedExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tga" };
@@ -391,3 +393,5 @@ bool Pack(std::vector<ImageDetails> images, std::filesystem::path const& outputP
 
     return true;
 }
+
+} // namespace moth_packer

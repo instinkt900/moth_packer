@@ -1,6 +1,6 @@
 #include <catch2/catch_all.hpp>
 
-#include "packer.h"
+#include "moth_packer/packer.h"
 #include "test_helpers.h"
 
 #include <nlohmann/json.hpp>
@@ -8,6 +8,8 @@
 
 #include <filesystem>
 #include <fstream>
+
+using moth_packer::Pack;
 
 struct SilenceSpdlog : Catch::EventListenerBase {
     using EventListenerBase::EventListenerBase;
@@ -74,13 +76,13 @@ TEST_CASE("Pack skips images that exceed max atlas dimensions", "[pack]") {
     TempDir out;
 
     // one image that fits, one that doesn't
-    std::vector<ImageDetails> images = {
+    std::vector<moth_packer::ImageDetails> images = {
         MakeTestImage(src.path, "small.png", 16, 16),
         MakeTestImage(src.path, "big.png", 64, 64),
     };
 
     // max is 32x32, so big.png should be skipped but small.png still packs
-    CHECK(Pack(images, out.path, "test", false, false, 16, 16, 32, 32));
+    CHECK(moth_packer::Pack(images, out.path, "test", false, false, 16, 16, 32, 32));
     CHECK(std::filesystem::exists(out.path / "test.json"));
 }
 
@@ -89,13 +91,13 @@ TEST_CASE("Pack produces multiple atlases when images do not fit in one", "[pack
     TempDir out;
 
     // each image is 32x32, atlas max is 32x32 — each image needs its own atlas
-    std::vector<ImageDetails> images = {
+    std::vector<moth_packer::ImageDetails> images = {
         MakeTestImage(src.path, "a.png", 32, 32),
         MakeTestImage(src.path, "b.png", 32, 32),
         MakeTestImage(src.path, "c.png", 32, 32),
     };
 
-    CHECK(Pack(images, out.path, "test", false, false, 32, 32, 32, 32));
+    CHECK(moth_packer::Pack(images, out.path, "test", false, false, 32, 32, 32, 32));
     CHECK(std::filesystem::exists(out.path / "test_0.png"));
     CHECK(std::filesystem::exists(out.path / "test_1.png"));
     CHECK(std::filesystem::exists(out.path / "test_2.png"));
@@ -106,9 +108,9 @@ TEST_CASE("Pack returns true with empty atlases when all images exceed max dimen
     TempDir out;
 
     // image is 64x64 but max atlas is 32x32
-    std::vector<ImageDetails> images = { MakeTestImage(src.path, "big.png", 64, 64) };
+    std::vector<moth_packer::ImageDetails> images = { MakeTestImage(src.path, "big.png", 64, 64) };
 
-    CHECK(Pack(images, out.path, "test", false, false, 32, 32, 32, 32));
+    CHECK(moth_packer::Pack(images, out.path, "test", false, false, 32, 32, 32, 32));
     REQUIRE(std::filesystem::exists(out.path / "test.json"));
     std::ifstream f(out.path / "test.json");
     CHECK(nlohmann::json::parse(f)["atlases"].empty());
@@ -139,7 +141,7 @@ TEST_CASE("Pack JSON descriptor contains correct relative paths", "[pack]") {
     auto const outPath = root.path / "out";
     std::filesystem::create_directories(outPath);
 
-    ImageDetails image;
+    moth_packer::ImageDetails image;
 
     SECTION("image in same directory as output") {
         image = MakeTestImage(outPath, "a.png", 16, 16);
