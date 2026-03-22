@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.27)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" MOTH_PACKER_VERSION)
 string(STRIP "${MOTH_PACKER_VERSION}" MOTH_PACKER_VERSION)
 
-project(moth_packer VERSION ${MOTH_PACKER_VERSION} DESCRIPTION "Standalone texture packer CLI for moth_ui layouts")
+project(moth_packer VERSION ${MOTH_PACKER_VERSION} DESCRIPTION "Texture packer library and CLI for moth_ui layouts")
 
 message("Building with CMake version: ${CMAKE_VERSION}")
 
@@ -11,29 +11,55 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(SOURCES
-    src/main.cpp
-    src/packer.cpp
-    src/stb_impl.c
+find_package(moth_ui REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(CLI11 REQUIRED)
+
+# ---------------------------------------------------------------------------
+# Library
+# ---------------------------------------------------------------------------
+
+add_library(moth_packer src/packer.cpp src/stb_impl.c)
+set_target_properties(moth_packer PROPERTIES VERSION ${PROJECT_VERSION})
+target_include_directories(moth_packer
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        src
+        external/stb
+)
+target_link_libraries(moth_packer
+    PUBLIC  moth_ui::moth_ui
+    PRIVATE spdlog::spdlog
 )
 
-find_package(moth_ui REQUIRED)
-find_package(CLI11 REQUIRED)
-find_package(spdlog REQUIRED)
-
-add_executable(${PROJECT_NAME} ${SOURCES})
-set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})
-target_include_directories(${PROJECT_NAME} PRIVATE src external/stb)
-target_compile_definitions(${PROJECT_NAME} PRIVATE MOTH_PACKER_VERSION="${PROJECT_VERSION}")
-target_link_libraries(${PROJECT_NAME} moth_ui::moth_ui)
-target_link_libraries(${PROJECT_NAME} CLI11::CLI11)
-target_link_libraries(${PROJECT_NAME} spdlog::spdlog)
-
 if(MSVC)
-    set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "/W3 /WX")
-    target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_definitions(moth_packer PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(moth_packer PRIVATE /W3 /WX)
 else()
-    set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-Wall -Werror")
+    target_compile_options(moth_packer PRIVATE -Wall -Werror)
 endif()
 
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+install(TARGETS moth_packer
+    EXPORT moth_packerTargets
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+)
+install(DIRECTORY include/ DESTINATION include)
+
+# ---------------------------------------------------------------------------
+# CLI executable
+# ---------------------------------------------------------------------------
+
+add_executable(moth_packer_cli src/main.cpp)
+set_target_properties(moth_packer_cli PROPERTIES OUTPUT_NAME moth_packer)
+target_compile_definitions(moth_packer_cli PRIVATE MOTH_PACKER_VERSION="${MOTH_PACKER_VERSION}")
+target_link_libraries(moth_packer_cli PRIVATE moth_packer CLI11::CLI11 spdlog::spdlog)
+
+if(MSVC)
+    target_compile_definitions(moth_packer_cli PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(moth_packer_cli PRIVATE /W3 /WX)
+else()
+    target_compile_options(moth_packer_cli PRIVATE -Wall -Werror)
+endif()

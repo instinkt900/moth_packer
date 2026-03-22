@@ -1,6 +1,6 @@
 #pragma once
 
-#include "packer.h"
+#include "moth_packer/packer.h"
 
 #include "stb_image_write.h"
 
@@ -42,7 +42,7 @@ struct TempDir {
 };
 
 // Write a solid-colour RGBA PNG of the given dimensions and return an ImageDetails for it
-inline ImageDetails MakeTestImage(std::filesystem::path const& dir, std::string const& name, int width, int height) {
+inline moth_packer::ImageDetails MakeTestImage(std::filesystem::path const& dir, std::string const& name, int width, int height) {
     if (width <= 0 || height <= 0) {
         throw std::invalid_argument("MakeTestImage: width and height must be positive");
     }
@@ -53,7 +53,7 @@ inline ImageDetails MakeTestImage(std::filesystem::path const& dir, std::string 
         throw std::runtime_error("MakeTestImage: failed to write PNG: " + filePath.string());
     }
 
-    ImageDetails details;
+    moth_packer::ImageDetails details;
     details.path = filePath;
     details.dimensions = { width, height };
     details.channels = channels;
