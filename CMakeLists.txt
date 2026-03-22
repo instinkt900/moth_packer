@@ -49,6 +49,12 @@ install(TARGETS moth_packer
     EXPORT moth_packerTargets
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+install(EXPORT moth_packerTargets
+    FILE moth_packerTargets.cmake
+    NAMESPACE moth_packer::
+    DESTINATION lib/cmake/moth_packer
 )
 install(DIRECTORY include/ DESTINATION include)
 
@@ -68,4 +74,6 @@ if(MOTH_PACKER_BUILD_CLI)
     else()
         target_compile_options(moth_packer_cli PRIVATE -Wall -Werror)
     endif()
+
+    install(TARGETS moth_packer_cli RUNTIME DESTINATION bin)
 endif()
