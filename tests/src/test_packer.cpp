@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <fstream>
 
+using moth_packer::Pack;
+
 struct SilenceSpdlog : Catch::EventListenerBase {
     using EventListenerBase::EventListenerBase;
     void testRunStarting(Catch::TestRunInfo const& /*info*/) override {
