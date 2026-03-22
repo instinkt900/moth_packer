@@ -1,13 +1,11 @@
 #include <catch2/catch_all.hpp>
 
 #include "packer.h"
-
-#include "stb_image_write.h"
+#include "test_helpers.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
-#include <atomic>
 #include <filesystem>
 #include <fstream>
 
@@ -18,41 +16,6 @@ struct SilenceSpdlog : Catch::EventListenerBase {
     }
 };
 CATCH_REGISTER_LISTENER(SilenceSpdlog)
-
-namespace {
-    // RAII temporary directory — created on construction, recursively deleted on destruction
-    struct TempDir {
-        std::filesystem::path path;
-
-        TempDir() {
-            static std::atomic<int> s_counter{ 0 };
-            auto const name = "moth_packer_tests_" + std::to_string(++s_counter);
-            path = std::filesystem::temp_directory_path() / name;
-            std::filesystem::create_directories(path);
-        }
-
-        ~TempDir() {
-            std::filesystem::remove_all(path);
-        }
-
-        TempDir(TempDir const&) = delete;
-        TempDir& operator=(TempDir const&) = delete;
-    };
-
-    // Write a solid-colour RGBA PNG of the given dimensions and return an ImageDetails for it
-    ImageDetails MakeTestImage(std::filesystem::path const& dir, std::string const& name, int width, int height) {
-        auto const filePath = dir / name;
-        int const channels = 4;
-        std::vector<uint8_t> pixels(static_cast<size_t>(width) * height * channels, 255);
-        stbi_write_png(filePath.string().c_str(), width, height, channels, pixels.data(), width * channels);
-
-        ImageDetails details;
-        details.path = filePath;
-        details.dimensions = { width, height };
-        details.channels = channels;
-        return details;
-    }
-}
 
 TEST_CASE("Pack returns false for empty image list", "[pack]") {
     TempDir out;

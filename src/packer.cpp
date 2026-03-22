@@ -200,7 +200,9 @@ bool CollectImagesFromFile(std::filesystem::path const& inputList, std::vector<I
             continue;
         }
         // skip duplicates
-        if (std::end(dstList) != ranges::find_if(dstList, [&](auto const& d) { return d.path == imagePath; })) {
+        auto const isDuplicate = [&](ImageDetails const& d) { return d.path == imagePath; };
+        if (ranges::find_if(dstList, isDuplicate) != std::end(dstList) ||
+            ranges::find_if(images, isDuplicate) != std::end(images)) {
             continue;
         }
         ImageDetails details;
@@ -240,7 +242,9 @@ bool CollectImagesFromDir(std::filesystem::path const& inputPath, bool const& re
             }
             auto const& imagePath = entry.path();
             // skip duplicates
-            if (std::end(dstList) != ranges::find_if(dstList, [&](auto const& d) { return d.path == imagePath; })) {
+            auto const isDuplicate = [&](ImageDetails const& d) { return d.path == imagePath; };
+            if (ranges::find_if(dstList, isDuplicate) != std::end(dstList) ||
+                ranges::find_if(images, isDuplicate) != std::end(images)) {
                 continue;
             }
             ImageDetails details;

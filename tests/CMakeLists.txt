@@ -17,6 +17,7 @@ set(SOURCES
     ../src/packer.cpp
     ../src/stb_impl.c
     src/test_packer.cpp
+    src/test_collect.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
