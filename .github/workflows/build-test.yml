@@ -6,6 +6,7 @@ on:
     branches: [ master ]
     paths:
       - 'src/**'
+      - 'tests/**'
       - 'CMakeLists.txt'
       - 'conanfile.py'
       - 'version.txt'
@@ -13,6 +14,7 @@ on:
     branches: [ master ]
     paths:
       - 'src/**'
+      - 'tests/**'
       - 'CMakeLists.txt'
       - 'conanfile.py'
       - 'version.txt'
@@ -42,7 +44,7 @@ jobs:
 
     - name: Add private artifactory
       run: |
-        conan remote add artifactory ${{ secrets.ARTIFACTORY_URL }} --force
+        conan remote add artifactory ${{ vars.ARTIFACTORY_URL }} --force
         conan remote login artifactory ci -p ${{ secrets.ARTIFACTS_TOKEN }}
 
     - name: Configure and build
@@ -51,3 +53,36 @@ jobs:
         conan install . -s compiler.cppstd=17 -s build_type=Release --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=true
         cmake --preset ${{ matrix.configure_preset }}
         cmake --build --preset conan-release --config Release
+
+  test:
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      matrix:
+        include:
+          - os: windows
+            runs_on: windows-latest
+            configure_preset: conan-default
+          - os: linux
+            runs_on: ubuntu-latest
+            configure_preset: conan-debug
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Conan
+      uses: conan-io/setup-conan@v1
+      with:
+        cache_packages: true
+
+    - name: Build and run tests
+      working-directory: tests
+      shell: bash
+      run: |
+        conan remote add artifactory ${{ vars.ARTIFACTORY_URL }} --force
+        conan remote login artifactory ci -p ${{ secrets.ARTIFACTS_TOKEN }}
+        conan install . -s compiler.cppstd=17 -s build_type=Debug --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=true
+        cmake --preset ${{ matrix.configure_preset }}
+        cmake --build --preset conan-debug --config Debug
+        ctest --preset conan-debug --build-config Debug --output-on-failure
