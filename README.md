@@ -149,7 +149,7 @@ pip install conan
 
 ### Library mode
 
-The default build produces the static library only — no CLI11 dependency required. This is the mode used when moth_packer is consumed as a Conan package by another project.
+The default build produces the static library only. This is the mode used when moth_packer is consumed as a Conan package by another project.
 
 **Linux:**
 ```bash
@@ -167,7 +167,7 @@ cmake --build --preset conan-release
 
 ### CLI mode
 
-Pass `-o moth_packer:build_cli=True` to include CLI11 and build the `moth_packer` executable alongside the library.
+Pass `-o moth_packer:build_cli=True` to build the `moth_packer` executable alongside the library.
 
 **Linux:**
 ```bash
