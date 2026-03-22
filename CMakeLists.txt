@@ -23,7 +23,7 @@ endif()
 # Library
 # ---------------------------------------------------------------------------
 
-add_library(moth_packer src/packer.cpp src/stb_impl.c)
+add_library(moth_packer STATIC src/packer.cpp src/stb_impl.c)
 set_target_properties(moth_packer PROPERTIES VERSION ${PROJECT_VERSION})
 target_include_directories(moth_packer
     PUBLIC
