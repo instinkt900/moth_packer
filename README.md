@@ -4,7 +4,7 @@
 [![Release](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml/badge.svg)](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_ui) layouts. Available as both a **C++ library** (for embedding packing into your own tools) and a **command-line tool**. Supports plain image directories, file lists, and moth_ui layout files as input sources. Outputs a single JSON descriptor alongside one or more atlas PNGs.
+A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_ui) layouts. Available as both a **C++ library** (for embedding packing into your own tools) and a **command-line tool**. Supports plain image directories, file lists, and moth_ui layout files as input sources. Outputs a single JSON descriptor alongside one or more atlas PNGs.
 
 ---
 
@@ -147,20 +147,22 @@ python3 -m venv .venv
 pip install conan
 ```
 
+**C++17 is required.** A `.conan/profile` is provided that sets `compiler.cppstd=17`. This profile is used in CI and can be used directly or as a reference when building locally.
+
 ### Library mode
 
 The default build produces the static library only. This is the mode used when moth_packer is consumed as a Conan package by another project.
 
 **Linux:**
 ```bash
-conan install . -s compiler.cppstd=17 -s build_type=Release --build=missing
+conan install . -pr .conan/profile -s build_type=Release --build=missing
 cmake --preset conan-release
 cmake --build --preset conan-release
 ```
 
 **Windows:**
 ```bash
-conan install . -s compiler.cppstd=17 -s build_type=Release --build=missing
+conan install . -pr .conan/profile -s build_type=Release --build=missing
 cmake --preset conan-default
 cmake --build --preset conan-release
 ```
@@ -171,14 +173,14 @@ Pass `-o moth_packer:build_cli=True` to build the `moth_packer` executable along
 
 **Linux:**
 ```bash
-conan install . -o moth_packer:build_cli=True -s compiler.cppstd=17 -s build_type=Release --build=missing
+conan install . -pr .conan/profile -o moth_packer:build_cli=True -s build_type=Release --build=missing
 cmake --preset conan-release
 cmake --build --preset conan-release
 ```
 
 **Windows:**
 ```bash
-conan install . -o moth_packer:build_cli=True -s compiler.cppstd=17 -s build_type=Release --build=missing
+conan install . -pr .conan/profile -o moth_packer:build_cli=True -s build_type=Release --build=missing
 cmake --preset conan-default
 cmake --build --preset conan-release
 ```
