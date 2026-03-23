@@ -84,7 +84,7 @@ jobs:
       run: |
         conan remote add artifactory ${{ vars.ARTIFACTORY_URL }} --force
         conan remote login artifactory ci -p ${{ secrets.ARTIFACTS_TOKEN }}
-        conan install . -pr .conan/profile -s build_type=Debug --build=missing
+        conan install . -pr ../.conan/profile -s build_type=Debug --build=missing
         cmake --preset ${{ matrix.configure_preset }}
         cmake --build --preset conan-debug --config Debug
         ctest --preset conan-debug --build-config Debug --output-on-failure
