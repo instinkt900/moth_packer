@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 Entries are generated automatically from git history using [git-cliff](https://github.com/orhun/git-cliff).
 
+## [0.2.1] - 2026-03-25
+### Bug Fixes
+- Force-refresh tags on fetch to avoid stale refs on retry
+- Use ../.conan/profile in tests subdirectory
+
+### Miscellaneous
+- Adjusting moth_ui version requirements
+
 ## [0.2.0] - 2026-03-22
 ### Bug Fixes
 - Fetch tags after creation so git-cliff --current finds the tag
@@ -11,6 +19,14 @@ Entries are generated automatically from git history using [git-cliff](https://g
 - Clarify build instructions in README.md
 
 ## [0.1.1] - 2026-03-22
+### Features
+- Add test project skeleton
+- Add Pack tests
+- Add JSON path tests and silence spdlog during tests
+- Add Collect tests and fix duplicate detection bug
+- Add additional Pack and Collect tests
+- Add build_cli conan option, default false
+
 ### Bug Fixes
 - Use PID in TempDir names to prevent parallel test collisions
 - Check stbi_write_png result and pass explicit Debug config to cmake/ctest
@@ -21,44 +37,24 @@ Entries are generated automatically from git history using [git-cliff](https://g
 - Add using moth_packer::Pack to test file for unqualified calls
 - Explicitly declare moth_packer as STATIC library
 
-### Changes
-- Use repository variable for ARTIFACTORY_URL
-- Bump version from 0.1.0 to 0.1.1
+### Refactoring
+- Split moth_packer into library and CLI, add moth_packer namespace
+- Gate CLI build and CLI11 dep behind MOTH_PACKER_BUILD_CLI option
 
 ### Documentation
 - Add full ecosystem table to Related Projects
 - Update canyon link to moth_graphics in Related Projects
 
-### Features
-- Add test project skeleton
-- Add Pack tests
-- Add JSON path tests and silence spdlog during tests
-- Add Collect tests and fix duplicate detection bug
-- Add additional Pack and Collect tests
-- Add build_cli conan option, default false
+### Testing
+- Fixed small issue by using non-throwing version of remove_all
 
 ### Miscellaneous
 - Bump version to 0.2.0
 
-### Refactoring
-- Split moth_packer into library and CLI, add moth_packer namespace
-- Gate CLI build and CLI11 dep behind MOTH_PACKER_BUILD_CLI option
-
-### Testing
-- Fixed small issue by using non-throwing version of remove_all
+### Changes
+- Bump version from 0.1.0 to 0.1.1
 
 ## [0.1.0] - 2026-03-21
-### Bug Fixes
-- Guard FindOptimalDimensions against empty candidate list and zero-ratio results
-
-### Changes
-- Fix README title casing and formatting
-- Add build, upload, and release workflows
-
-### Documentation
-- Add README, LICENSE and TODO
-- Add CI badges to README
-
 ### Features
 - Initial moth_packer CLI tool
 - Add output name argument and optional output directory flag
@@ -67,10 +63,20 @@ Entries are generated automatically from git history using [git-cliff](https://g
 - Add version to help text and -v/--version flag
 - Add --verbose, --silent and --dry-run flags
 
-### Miscellaneous
-- Removing unused conan profiles and updating docs
+### Bug Fixes
+- Guard FindOptimalDimensions against empty candidate list and zero-ratio results
 
 ### Refactoring
 - Consolidate pack output to single JSON descriptor referencing multiple atlas PNGs
+
+### Documentation
+- Add README, LICENSE and TODO
+- Add CI badges to README
+
+### Miscellaneous
+- Removing unused conan profiles and updating docs
+
+### Changes
+- Fix README title casing and formatting
 
 
