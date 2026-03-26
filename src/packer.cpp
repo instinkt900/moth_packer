@@ -472,6 +472,10 @@ namespace moth_packer {
             spdlog::error("No images to pack!");
             return false;
         }
+        if (options.filename.empty()) {
+            spdlog::error("PackOptions::filename must not be empty");
+            return false;
+        }
         if (!std::filesystem::exists(options.outputPath)) {
             spdlog::error("Output path does not exist: {}", options.outputPath.string());
             return false;

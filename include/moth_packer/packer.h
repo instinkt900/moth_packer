@@ -57,7 +57,8 @@ namespace moth_packer {
                                      bool recursive,
                                      std::vector<ImageDetails>& dstList);
 
-    /// Options controlling atlas generation. All fields have sensible defaults.
+    /// Options controlling atlas generation.
+    /// @note `outputPath` and `filename` are required — Pack() will return false if either is empty.
     struct PackOptions {
         std::filesystem::path outputPath;           ///< Directory where atlas PNGs and the JSON descriptor are written.
         std::string filename;                       ///< Base name for output files (no extension).
