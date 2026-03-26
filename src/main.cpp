@@ -104,6 +104,19 @@ int main(int argc, char* argv[]) {
     app.add_flag("--absolute-paths", absolutePaths, "Write absolute paths in the output JSON.")
         ->default_val(false);
 
+    moth_packer::AtlasFormat atlasFormat = moth_packer::AtlasFormat::PNG;
+    app.add_option("--format", atlasFormat, "Output image format for atlas files (default: png)")
+        ->transform(CLI::CheckedTransformer(
+            std::map<std::string, moth_packer::AtlasFormat>{ { "png", moth_packer::AtlasFormat::PNG },
+                                                             { "bmp", moth_packer::AtlasFormat::BMP },
+                                                             { "tga", moth_packer::AtlasFormat::TGA },
+                                                             { "jpeg", moth_packer::AtlasFormat::JPEG },
+                                                             { "jpg", moth_packer::AtlasFormat::JPEG } }));
+
+    int jpegQuality = 90;
+    app.add_option("--jpeg-quality", jpegQuality, "JPEG encode quality 1-100 (default: 90, only used with --format jpeg)")
+        ->check(CLI::Range(1, 100));
+
     if (argc == 1) {
         std::cout << app.help();
         return 0;
@@ -157,6 +170,8 @@ int main(int argc, char* argv[]) {
     packOptions.paddingColor = paddingColor;
     packOptions.prettyJson = prettyJson;
     packOptions.absolutePaths = absolutePaths;
+    packOptions.format = atlasFormat;
+    packOptions.jpegQuality = jpegQuality;
 
     bool result = moth_packer::Pack(images, packOptions);
 
