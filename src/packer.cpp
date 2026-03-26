@@ -68,6 +68,13 @@ namespace moth_packer {
             }
         }
 
+        std::string LowerExtension(std::filesystem::path const& path) {
+            auto ext = path.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return ext;
+        }
+
         std::string FormatExtension(AtlasFormat format) {
             switch (format) {
             case AtlasFormat::PNG:  return ".png";
@@ -335,7 +342,7 @@ namespace moth_packer {
                 continue;
             }
             std::filesystem::path imagePath(line);
-            auto const ext = imagePath.extension().string();
+            auto const ext = LowerExtension(imagePath);
             if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
                 spdlog::warn("Unsupported image format, skipping: {}", line);
                 continue;
@@ -374,7 +381,7 @@ namespace moth_packer {
     bool CollectImagesFromGlob(std::string const& pattern, std::vector<ImageDetails>& dstList) {
         std::vector<ImageDetails> images;
         for (auto&& matchPath : glob::rglob(pattern)) {
-            auto const ext = matchPath.extension().string();
+            auto const ext = LowerExtension(matchPath);
             if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
                 spdlog::warn("Unsupported image format, skipping: {}", matchPath.string());
                 continue;
@@ -420,7 +427,7 @@ namespace moth_packer {
                 if (!entry.is_regular_file()) {
                     continue;
                 }
-                auto const ext = entry.path().extension().string();
+                auto const ext = LowerExtension(entry.path());
                 if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
                     spdlog::warn("Unsupported image format, skipping: {}", entry.path().string());
                     continue;
