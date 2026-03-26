@@ -176,7 +176,7 @@ namespace moth_packer {
                     stbi_load(imagePath.string().c_str(), &srcWidth, &srcHeight, &srcChannels, atlasChannels);
                 if (srcPixels == nullptr) {
                     spdlog::error("Failed to load image for packing: {}", imagePath.string());
-                    continue;
+                    return {};
                 }
 
                 int const dstX = rect.x + padding;
