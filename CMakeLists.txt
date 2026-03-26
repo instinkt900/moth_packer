@@ -32,6 +32,7 @@ target_include_directories(moth_packer
     PRIVATE
         src
         external/stb
+        external/glob
 )
 target_link_libraries(moth_packer
     PUBLIC  moth_ui::moth_ui
