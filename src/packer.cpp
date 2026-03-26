@@ -147,7 +147,7 @@ namespace moth_packer {
         }
 
         // Composites packed rects into a PNG and returns the atlas JSON entry for the descriptor.
-        // Erases packed rects from the list regardless of success.
+        // Erases successfully packed rects from the list. Returns an empty JSON object on failure.
         nlohmann::json CommitPack(std::filesystem::path const& imagePngPath,
                                   std::filesystem::path const& outputPath,
                                   bool dryRun,
@@ -356,7 +356,7 @@ namespace moth_packer {
     }
 
     bool CollectImagesFromDir(std::filesystem::path const& inputPath,
-                              bool const& recursive,
+                              bool recursive,
                               std::vector<ImageDetails>& dstList) {
         if (!std::filesystem::exists(inputPath)) {
             spdlog::error("Input path does not exist: {}", inputPath.string());
