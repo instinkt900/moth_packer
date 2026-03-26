@@ -27,7 +27,7 @@ TEST_CASE("Pack returns false for empty image list", "[pack]") {
 TEST_CASE("Pack returns false when output path does not exist", "[pack]") {
     TempDir src;
     auto images = { MakeTestImage(src.path, "a.png", 16, 16) };
-    CHECK_FALSE(Pack({ images }, MakeTestPackOptions("/nonexistent/path")));
+    CHECK_FALSE(Pack(images, MakeTestPackOptions("/nonexistent/path")));
 }
 
 TEST_CASE("Pack returns false when output JSON already exists and forceOverwrite is false", "[pack]") {
@@ -38,7 +38,7 @@ TEST_CASE("Pack returns false when output JSON already exists and forceOverwrite
     // pre-create the descriptor file
     std::ofstream(out.path / "test.json").close();
 
-    CHECK_FALSE(Pack({ images }, MakeTestPackOptions(out.path)));
+    CHECK_FALSE(Pack(images, MakeTestPackOptions(out.path)));
 }
 
 TEST_CASE("Pack succeeds when output JSON already exists and forceOverwrite is true", "[pack]") {
@@ -50,7 +50,7 @@ TEST_CASE("Pack succeeds when output JSON already exists and forceOverwrite is t
 
     auto opts = MakeTestPackOptions(out.path);
     opts.forceOverwrite = true;
-    CHECK(Pack({ images }, opts));
+    CHECK(Pack(images, opts));
 }
 
 TEST_CASE("Pack dry run returns true and writes no files", "[pack]") {
@@ -60,7 +60,7 @@ TEST_CASE("Pack dry run returns true and writes no files", "[pack]") {
 
     auto opts = MakeTestPackOptions(out.path);
     opts.dryRun = true;
-    CHECK(Pack({ images }, opts));
+    CHECK(Pack(images, opts));
     CHECK_FALSE(std::filesystem::exists(out.path / "test.json"));
     CHECK_FALSE(std::filesystem::exists(out.path / "test_0.png"));
 }
@@ -70,7 +70,7 @@ TEST_CASE("Pack writes JSON descriptor and atlas PNG on success", "[pack]") {
     TempDir out;
     auto images = { MakeTestImage(src.path, "a.png", 16, 16) };
 
-    CHECK(Pack({ images }, MakeTestPackOptions(out.path)));
+    CHECK(Pack(images, MakeTestPackOptions(out.path)));
     CHECK(std::filesystem::exists(out.path / "test.json"));
     CHECK(std::filesystem::exists(out.path / "test_0.png"));
 }
