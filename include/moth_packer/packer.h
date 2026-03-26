@@ -84,7 +84,10 @@ namespace moth_packer {
     ///
     /// @param images  Images to pack. Passed by value; the caller's list is unmodified.
     /// @param options Packing configuration.
-    /// @return True if all images were packed and (when not a dry run) all files written successfully.
+    /// @return True when packing completes and (when not a dry run) output files are written
+    ///         successfully. Oversized images are skipped with a warning but do not cause failure.
+    ///         Returns false only on fatal errors such as an empty image list, invalid PackOptions,
+    ///         an image that fails to load during compositing, or a file-write failure.
     bool Pack(std::vector<ImageDetails> images, PackOptions const& options);
 
 } // namespace moth_packer
