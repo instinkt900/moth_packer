@@ -186,8 +186,9 @@ namespace moth_packer {
                 for (int row = 0; row < srcHeight; ++row) {
                     auto const srcOffset = static_cast<size_t>(row) * srcWidth * atlasChannels;
                     auto const dstOffset = (static_cast<size_t>(dstY + row) * width + dstX) * atlasChannels;
-                    std::memcpy(
-                        atlasPixels.data() + dstOffset, srcPixels + srcOffset, static_cast<size_t>(srcWidth) * atlasChannels);
+                    std::memcpy(atlasPixels.data() + dstOffset,
+                                srcPixels + srcOffset,
+                                static_cast<size_t>(srcWidth) * atlasChannels);
                 }
 
                 // Fill padding border
@@ -204,34 +205,41 @@ namespace moth_packer {
                             }
                             auto const dstOffset = (static_cast<size_t>(py) * width + px) * atlasChannels;
                             switch (paddingType) {
-                                case PaddingType::Color:
-                                    atlasPixels[dstOffset + 0] = static_cast<uint8_t>((paddingColor >> 24) & 0xFF);
-                                    atlasPixels[dstOffset + 1] = static_cast<uint8_t>((paddingColor >> 16) & 0xFF);
-                                    atlasPixels[dstOffset + 2] = static_cast<uint8_t>((paddingColor >> 8) & 0xFF);
-                                    atlasPixels[dstOffset + 3] = static_cast<uint8_t>(paddingColor & 0xFF);
-                                    break;
-                                case PaddingType::Extend: {
-                                    int const csx = std::clamp(sx, 0, srcWidth - 1);
-                                    int const csy = std::clamp(sy, 0, srcHeight - 1);
-                                    std::memcpy(atlasPixels.data() + dstOffset, srcPixelAt(csx, csy), atlasChannels);
-                                    break;
-                                }
-                                case PaddingType::Mirror: {
-                                    // NOLINTBEGIN(readability-avoid-nested-conditional-operator)
-                                    int msx = sx < 0 ? (-sx - 1) : (sx >= srcWidth ? ((2 * srcWidth) - sx - 1) : sx);
-                                    int msy = sy < 0 ? (-sy - 1) : (sy >= srcHeight ? ((2 * srcHeight) - sy - 1) : sy);
-                                    // NOLINTEND(readability-avoid-nested-conditional-operator)
-                                    msx = std::clamp(msx, 0, srcWidth - 1);
-                                    msy = std::clamp(msy, 0, srcHeight - 1);
-                                    std::memcpy(atlasPixels.data() + dstOffset, srcPixelAt(msx, msy), atlasChannels);
-                                    break;
-                                }
-                                case PaddingType::Wrap: {
-                                    int const wsx = ((sx % srcWidth) + srcWidth) % srcWidth;
-                                    int const wsy = ((sy % srcHeight) + srcHeight) % srcHeight;
-                                    std::memcpy(atlasPixels.data() + dstOffset, srcPixelAt(wsx, wsy), atlasChannels);
-                                    break;
-                                }
+                            case PaddingType::Color:
+                                atlasPixels[dstOffset + 0] =
+                                    static_cast<uint8_t>((paddingColor >> 24) & 0xFF);
+                                atlasPixels[dstOffset + 1] =
+                                    static_cast<uint8_t>((paddingColor >> 16) & 0xFF);
+                                atlasPixels[dstOffset + 2] = static_cast<uint8_t>((paddingColor >> 8) & 0xFF);
+                                atlasPixels[dstOffset + 3] = static_cast<uint8_t>(paddingColor & 0xFF);
+                                break;
+                            case PaddingType::Extend: {
+                                int const csx = std::clamp(sx, 0, srcWidth - 1);
+                                int const csy = std::clamp(sy, 0, srcHeight - 1);
+                                std::memcpy(
+                                    atlasPixels.data() + dstOffset, srcPixelAt(csx, csy), atlasChannels);
+                                break;
+                            }
+                            case PaddingType::Mirror: {
+                                // NOLINTBEGIN(readability-avoid-nested-conditional-operator)
+                                int msx =
+                                    sx < 0 ? (-sx - 1) : (sx >= srcWidth ? ((2 * srcWidth) - sx - 1) : sx);
+                                int msy =
+                                    sy < 0 ? (-sy - 1) : (sy >= srcHeight ? ((2 * srcHeight) - sy - 1) : sy);
+                                // NOLINTEND(readability-avoid-nested-conditional-operator)
+                                msx = std::clamp(msx, 0, srcWidth - 1);
+                                msy = std::clamp(msy, 0, srcHeight - 1);
+                                std::memcpy(
+                                    atlasPixels.data() + dstOffset, srcPixelAt(msx, msy), atlasChannels);
+                                break;
+                            }
+                            case PaddingType::Wrap: {
+                                int const wsx = ((sx % srcWidth) + srcWidth) % srcWidth;
+                                int const wsy = ((sy % srcHeight) + srcHeight) % srcHeight;
+                                std::memcpy(
+                                    atlasPixels.data() + dstOffset, srcPixelAt(wsx, wsy), atlasChannels);
+                                break;
+                            }
                             }
                         }
                     }
@@ -240,9 +248,8 @@ namespace moth_packer {
                 stbi_image_free(srcPixels);
 
                 nlohmann::json details;
-                auto const recordedPath = absolutePaths
-                    ? std::filesystem::absolute(imagePath)
-                    : std::filesystem::relative(imagePath, outputPath);
+                auto const recordedPath = absolutePaths ? std::filesystem::absolute(imagePath)
+                                                        : std::filesystem::relative(imagePath, outputPath);
                 details["path"] = recordedPath.string();
                 details["rect"] = { { "x", dstX }, { "y", dstY }, { "w", srcWidth }, { "h", srcHeight } };
                 atlasImages.push_back(details);
@@ -264,8 +271,8 @@ namespace moth_packer {
 
             nlohmann::json atlasEntry;
             atlasEntry["atlas"] = absolutePaths
-                ? std::filesystem::absolute(imagePngPath).string()
-                : std::filesystem::relative(imagePngPath, outputPath).string();
+                                      ? std::filesystem::absolute(imagePngPath).string()
+                                      : std::filesystem::relative(imagePngPath, outputPath).string();
             atlasEntry["images"] = atlasImages;
             return atlasEntry;
         }
@@ -497,7 +504,8 @@ namespace moth_packer {
         nlohmann::json atlases;
         int numPacks = 0;
         for (; !stbRects.empty(); ++numPacks) {
-            auto const imagePngPath = options.outputPath / fmt::format("{}_{}.png", options.filename, numPacks);
+            auto const imagePngPath =
+                options.outputPath / fmt::format("{}_{}.png", options.filename, numPacks);
 
             if (!options.forceOverwrite && std::filesystem::exists(imagePngPath)) {
                 // previously an error, but downgraded to a warning since we still continue.
@@ -505,16 +513,26 @@ namespace moth_packer {
                 continue;
             }
 
-            auto const packDim = FindOptimalDimensions(
-                stbNodes, stbRects, { options.minWidth, options.minHeight }, { options.maxWidth, options.maxHeight });
+            auto const packDim = FindOptimalDimensions(stbNodes,
+                                                       stbRects,
+                                                       { options.minWidth, options.minHeight },
+                                                       { options.maxWidth, options.maxHeight });
 
             stbrp_context stbContext;
             stbrp_init_target(
                 &stbContext, packDim.x, packDim.y, stbNodes.data(), static_cast<int>(stbNodes.size()));
             stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
-            auto const atlasJson = CommitPack(
-                imagePngPath, options.outputPath, options.dryRun, packDim.x, packDim.y, stbRects, images,
-                options.padding, options.paddingType, options.paddingColor, options.absolutePaths);
+            auto const atlasJson = CommitPack(imagePngPath,
+                                              options.outputPath,
+                                              options.dryRun,
+                                              packDim.x,
+                                              packDim.y,
+                                              stbRects,
+                                              images,
+                                              options.padding,
+                                              options.paddingType,
+                                              options.paddingColor,
+                                              options.absolutePaths);
             if (atlasJson.empty()) {
                 // empty return from commit pack means something bad happened
                 return false;

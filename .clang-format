@@ -2,6 +2,8 @@
 
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
+BinPackParameters: false
+BinPackArguments: false
 AllowShortBlocksOnASingleLine: true
 AllowShortFunctionsOnASingleLine: All
 BasedOnStyle: LLVM
@@ -21,7 +23,7 @@ BraceWrapping:
 BreakBeforeBraces: Custom
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeComma
-ColumnLimit: 0
+ColumnLimit: 110
 Cpp11BracedListStyle: false
 FixNamespaceComments: false
 IndentCaseLabels: false
