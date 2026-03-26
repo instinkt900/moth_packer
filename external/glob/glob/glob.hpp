@@ -6,6 +6,7 @@
 #include <map>
 #include <regex>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #ifdef GLOB_USE_GHC_FILESYSTEM
@@ -251,15 +252,23 @@ std::vector<fs::path> iter_directory(const fs::path &dirname, bool dironly) {
 }
 
 // Recursively yields relative pathnames inside a literal directory.
-static inline 
-std::vector<fs::path> rlistdir(const fs::path &dirname, bool dironly) {
+// visited tracks canonical paths of directories already entered to break symlink cycles.
+static inline
+std::vector<fs::path> rlistdir(const fs::path &dirname, bool dironly,
+                               std::unordered_set<std::string> &visited) {
   std::vector<fs::path> result;
   auto names = iter_directory(dirname, dironly);
   for (auto &x : names) {
     if (!is_hidden(x.string())) {
       result.push_back(x);
-      for (auto &y : rlistdir(x, dironly)) {
-        result.push_back(y);
+      if (fs::is_directory(x)) {
+        std::error_code ec;
+        auto canonical = fs::canonical(x, ec);
+        if (!ec && visited.insert(canonical.string()).second) {
+          for (auto &y : rlistdir(x, dironly, visited)) {
+            result.push_back(y);
+          }
+        }
       }
     }
   }
@@ -278,7 +287,11 @@ std::vector<fs::path> glob2(const fs::path &dirname, [[maybe_unused]] const std:
     result.push_back(".");
   }
   assert(is_recursive(pattern));
-  for (auto &dir : rlistdir(dirname, dironly)) {
+  std::unordered_set<std::string> visited;
+  std::error_code ec;
+  auto canonical = fs::canonical(dirname, ec);
+  if (!ec) visited.insert(canonical.string());
+  for (auto &dir : rlistdir(dirname, dironly, visited)) {
     result.push_back(dir);
   }
   return result;
