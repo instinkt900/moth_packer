@@ -480,6 +480,28 @@ namespace moth_packer {
             spdlog::error("Output path does not exist: {}", options.outputPath.string());
             return false;
         }
+        if (options.padding < 0) {
+            spdlog::error("PackOptions::padding must be non-negative (got {})", options.padding);
+            return false;
+        }
+        if (options.minWidth <= 0 || options.minHeight <= 0) {
+            spdlog::error("PackOptions::minWidth/minHeight must be positive");
+            return false;
+        }
+        if (options.maxWidth <= 0 || options.maxHeight <= 0) {
+            spdlog::error("PackOptions::maxWidth/maxHeight must be positive");
+            return false;
+        }
+        if (options.maxWidth < options.minWidth || options.maxHeight < options.minHeight) {
+            spdlog::error("PackOptions::maxWidth/maxHeight must be >= minWidth/minHeight");
+            return false;
+        }
+        // Guard against overflow in maxWidth*2 (stbNodes) and unrealistic atlas sizes.
+        constexpr int kMaxAtlasDim = 65536;
+        if (options.maxWidth > kMaxAtlasDim || options.maxHeight > kMaxAtlasDim) {
+            spdlog::error("PackOptions::maxWidth/maxHeight must not exceed {}", kMaxAtlasDim);
+            return false;
+        }
 
         std::vector<stbrp_rect> stbRects;
         stbRects.reserve(images.size());
