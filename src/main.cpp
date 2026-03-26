@@ -97,6 +97,9 @@ int main(int argc, char* argv[]) {
     bool dryRun = false;
     app.add_flag("--dry-run", dryRun, "Dry run. No files written.")->default_val(false);
 
+    bool prettyJson = false;
+    app.add_flag("--pretty", prettyJson, "Pretty print the output JSON.")->default_val(false);
+
     if (argc == 1) {
         std::cout << app.help();
         return 0;
@@ -147,7 +150,8 @@ int main(int argc, char* argv[]) {
                                     maxDimensions.second,
                                     padding,
                                     paddingType,
-                                    paddingColor);
+                                    paddingColor,
+                                    prettyJson);
 
     return result ? 0 : 1;
 }

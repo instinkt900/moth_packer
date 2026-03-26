@@ -40,6 +40,7 @@ namespace moth_packer {
               int maxHeight,
               int padding,
               PaddingType paddingType,
-              uint32_t paddingColor);
+              uint32_t paddingColor,
+              bool prettyJson);
 
 } // namespace moth_packer

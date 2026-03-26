@@ -466,7 +466,8 @@ namespace moth_packer {
               int maxHeight,
               int padding,
               PaddingType paddingType,
-              uint32_t paddingColor) {
+              uint32_t paddingColor,
+              bool prettyJson) {
         if (images.empty()) {
             spdlog::error("No images to pack!");
             return false;
@@ -532,7 +533,7 @@ namespace moth_packer {
             if (ofile.is_open()) {
                 nlohmann::json root;
                 root["atlases"] = atlases;
-                ofile << root;
+                ofile << (prettyJson ? root.dump(4) : root.dump());
             }
         }
 
