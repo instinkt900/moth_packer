@@ -221,16 +221,16 @@ namespace moth_packer {
                                 break;
                             }
                             case PaddingType::Mirror: {
-                                // NOLINTBEGIN(readability-avoid-nested-conditional-operator)
-                                int msx =
-                                    sx < 0 ? (-sx - 1) : (sx >= srcWidth ? ((2 * srcWidth) - sx - 1) : sx);
-                                int msy =
-                                    sy < 0 ? (-sy - 1) : (sy >= srcHeight ? ((2 * srcHeight) - sy - 1) : sy);
-                                // NOLINTEND(readability-avoid-nested-conditional-operator)
-                                msx = std::clamp(msx, 0, srcWidth - 1);
-                                msy = std::clamp(msy, 0, srcHeight - 1);
-                                std::memcpy(
-                                    atlasPixels.data() + dstOffset, srcPixelAt(msx, msy), atlasChannels);
+                                // Map any coordinate to the mirrored domain using a 2*size period.
+                                // This handles padding larger than the image dimension correctly.
+                                auto mirrorCoord = [](int c, int size) {
+                                    int const period = 2 * size;
+                                    c = ((c % period) + period) % period;
+                                    return c >= size ? period - c - 1 : c;
+                                };
+                                std::memcpy(atlasPixels.data() + dstOffset,
+                                            srcPixelAt(mirrorCoord(sx, srcWidth), mirrorCoord(sy, srcHeight)),
+                                            atlasChannels);
                                 break;
                             }
                             case PaddingType::Wrap: {
