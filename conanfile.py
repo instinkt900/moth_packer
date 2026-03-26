@@ -13,7 +13,7 @@ class MothPacker(ConanFile):
     options = {"build_cli": [True, False]}
     default_options = {"build_cli": False}
     generators = "CMakeDeps", "MSBuildToolchain", "MSBuildDeps"
-    exports_sources = "CMakeLists.txt", "version.txt", "include/*", "src/*", "external/stb/*"
+    exports_sources = "CMakeLists.txt", "version.txt", "include/*", "src/*", "external/stb/*", "external/glob/*"
 
     def set_version(self):
         self.version = load(self, "version.txt").strip()
