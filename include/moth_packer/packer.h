@@ -90,8 +90,7 @@ namespace moth_packer {
     ///         an image that fails to load during compositing, or a file-write failure.
     bool Pack(std::vector<ImageDetails> images, PackOptions const& options);
 
-    /// @deprecated Use Pack(images, PackOptions) instead.
-    [[deprecated("Use Pack(images, PackOptions) instead")]]
+    /// @deprecated Use Pack(images, PackOptions) instead. This overload will be removed in a future version.
     inline bool Pack(std::vector<ImageDetails> images,
                      std::filesystem::path outputPath,
                      std::string filename,
