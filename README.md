@@ -36,7 +36,7 @@ A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_u
 
 **Configurable padding** — add a pixel border around each image with four fill modes: solid colour (`color`), clamp-to-edge (`extend`), mirrored reflection (`mirror`), or tiling wrap (`wrap`).
 
-**Overwrite protection** — by default the packer refuses to overwrite existing output files. Pass `--force` to override.
+**Overwrite protection** — by default the packer refuses to overwrite existing output files and treats all images being skipped (oversized) as an error. Pass `--force` to override both behaviours.
 
 **Dry run** — see what would be packed and what output files would be written without touching the filesystem.
 
@@ -72,7 +72,7 @@ Exactly one input mode must be specified:
 |---|---|---|
 | `-o, --out <path>` | `.` | Directory to write output files into |
 | `-r, --recursive` | off | Recurse into subdirectories (directory input modes only) |
-| `-f, --force` | off | Overwrite existing output files |
+| `-f, --force` | off | Overwrite existing output files and allow packing to succeed with zero atlases (when all images are oversized) |
 | `-n, --min <w,h>` | `256,256` | Minimum atlas dimensions |
 | `-m, --max <w,h>` | `4096,4096` | Maximum atlas dimensions |
 | `-p, --padding <n>` | `0` | Pixels of padding added around each image on all sides |

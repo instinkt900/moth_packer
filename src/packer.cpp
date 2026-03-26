@@ -524,6 +524,14 @@ namespace moth_packer {
             ++i;
         }
 
+        if (stbRects.empty()) {
+            if (!options.forceOverwrite) {
+                spdlog::error("No images could be packed (all images exceeded max atlas dimensions)");
+                return false;
+            }
+            spdlog::warn("No images could be packed (all images exceeded max atlas dimensions); continuing due to --force");
+        }
+
         auto const packDetailsPath = options.outputPath / fmt::format("{}.json", options.filename);
         if (!options.forceOverwrite && std::filesystem::exists(packDetailsPath)) {
             spdlog::error("Destination exists: {}", packDetailsPath.string());

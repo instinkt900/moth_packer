@@ -117,11 +117,10 @@ TEST_CASE("Pack produces multiple atlases when images do not fit in one", "[pack
     CHECK(std::filesystem::exists(out.path / "test_2.png"));
 }
 
-TEST_CASE("Pack returns true with empty atlases when all images exceed max dimensions", "[pack]") {
+TEST_CASE("Pack returns false when all images exceed max dimensions", "[pack]") {
     TempDir src;
     TempDir out;
 
-    // image is 64x64 but max atlas is 32x32
     std::vector<moth_packer::ImageDetails> images = { MakeTestImage(src.path, "big.png", 64, 64) };
 
     auto opts = MakeTestPackOptions(out.path);
@@ -129,6 +128,21 @@ TEST_CASE("Pack returns true with empty atlases when all images exceed max dimen
     opts.minHeight = 32;
     opts.maxWidth = 32;
     opts.maxHeight = 32;
+    CHECK_FALSE(Pack(images, opts));
+}
+
+TEST_CASE("Pack with --force returns true with empty atlases when all images exceed max dimensions", "[pack]") {
+    TempDir src;
+    TempDir out;
+
+    std::vector<moth_packer::ImageDetails> images = { MakeTestImage(src.path, "big.png", 64, 64) };
+
+    auto opts = MakeTestPackOptions(out.path);
+    opts.minWidth = 32;
+    opts.minHeight = 32;
+    opts.maxWidth = 32;
+    opts.maxHeight = 32;
+    opts.forceOverwrite = true;
     CHECK(Pack(images, opts));
     REQUIRE(std::filesystem::exists(out.path / "test.json"));
     std::ifstream f(out.path / "test.json");
