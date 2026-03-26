@@ -157,7 +157,8 @@ namespace moth_packer {
                                   std::vector<ImageDetails> const& images,
                                   int padding,
                                   PaddingType paddingType,
-                                  uint32_t paddingColor) {
+                                  uint32_t paddingColor,
+                                  bool absolutePaths) {
             int const atlasChannels = 4;
             std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels, 0);
 
@@ -239,11 +240,13 @@ namespace moth_packer {
                 stbi_image_free(srcPixels);
 
                 nlohmann::json details;
-                auto const relativePath = std::filesystem::relative(imagePath, outputPath);
-                details["path"] = relativePath.string();
+                auto const recordedPath = absolutePaths
+                    ? std::filesystem::absolute(imagePath)
+                    : std::filesystem::relative(imagePath, outputPath);
+                details["path"] = recordedPath.string();
                 details["rect"] = { { "x", dstX }, { "y", dstY }, { "w", srcWidth }, { "h", srcHeight } };
                 atlasImages.push_back(details);
-                spdlog::info("Packed {} into {}", relativePath.string(), imagePngPath.string());
+                spdlog::info("Packed {} into {}", recordedPath.string(), imagePngPath.string());
             }
 
             if (!dryRun && stbi_write_png(imagePngPath.string().c_str(),
@@ -260,7 +263,9 @@ namespace moth_packer {
                         std::end(rects));
 
             nlohmann::json atlasEntry;
-            atlasEntry["atlas"] = std::filesystem::relative(imagePngPath, outputPath).string();
+            atlasEntry["atlas"] = absolutePaths
+                ? std::filesystem::absolute(imagePngPath).string()
+                : std::filesystem::relative(imagePngPath, outputPath).string();
             atlasEntry["images"] = atlasImages;
             return atlasEntry;
         }
@@ -467,7 +472,8 @@ namespace moth_packer {
               int padding,
               PaddingType paddingType,
               uint32_t paddingColor,
-              bool prettyJson) {
+              bool prettyJson,
+              bool absolutePaths) {
         if (images.empty()) {
             spdlog::error("No images to pack!");
             return false;
@@ -520,7 +526,7 @@ namespace moth_packer {
                 &stbContext, packDim.x, packDim.y, stbNodes.data(), static_cast<int>(stbNodes.size()));
             stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
             auto const atlasJson = CommitPack(
-                imagePngPath, outputPath, dryRun, packDim.x, packDim.y, stbRects, images, padding, paddingType, paddingColor);
+                imagePngPath, outputPath, dryRun, packDim.x, packDim.y, stbRects, images, padding, paddingType, paddingColor, absolutePaths);
             if (atlasJson.empty()) {
                 // empty return from commit pack means something bad happened
                 return false;

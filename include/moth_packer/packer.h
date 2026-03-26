@@ -41,6 +41,7 @@ namespace moth_packer {
               int padding,
               PaddingType paddingType,
               uint32_t paddingColor,
-              bool prettyJson);
+              bool prettyJson,
+              bool absolutePaths);
 
 } // namespace moth_packer

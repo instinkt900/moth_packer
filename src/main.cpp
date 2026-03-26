@@ -100,6 +100,9 @@ int main(int argc, char* argv[]) {
     bool prettyJson = false;
     app.add_flag("--pretty", prettyJson, "Pretty print the output JSON.")->default_val(false);
 
+    bool absolutePaths = false;
+    app.add_flag("--absolute-paths", absolutePaths, "Write absolute paths in the output JSON.")->default_val(false);
+
     if (argc == 1) {
         std::cout << app.help();
         return 0;
@@ -151,7 +154,8 @@ int main(int argc, char* argv[]) {
                                     padding,
                                     paddingType,
                                     paddingColor,
-                                    prettyJson);
+                                    prettyJson,
+                                    absolutePaths);
 
     return result ? 0 : 1;
 }
