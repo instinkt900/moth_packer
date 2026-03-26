@@ -66,6 +66,45 @@ namespace moth_packer {
             }
         }
 
+        // Matches a path string against a glob pattern.
+        // Supports * (any chars within one path component) and ** (any chars across separators).
+        bool GlobMatch(std::string_view pattern, std::string_view str) {
+            if (pattern.empty()) {
+                return str.empty();
+            }
+            if (pattern.size() >= 2 && pattern[0] == '*' && pattern[1] == '*') {
+                // ** matches zero or more path components
+                auto const rest = pattern.substr(2);
+                if (rest.empty() || rest == "/") {
+                    return true; // ** at end matches everything
+                }
+                // try matching rest against every suffix of str
+                for (size_t i = 0; i <= str.size(); ++i) {
+                    if (GlobMatch(rest.front() == '/' ? rest.substr(1) : rest, str.substr(i))) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            if (pattern[0] == '*') {
+                // * matches any chars within a single path component (not '/')
+                auto const rest = pattern.substr(1);
+                for (size_t i = 0; i <= str.size() && (i == 0 || str[i - 1] != '/'); ++i) {
+                    if (GlobMatch(rest, str.substr(i))) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            if (pattern[0] == '?') {
+                return !str.empty() && str[0] != '/' && GlobMatch(pattern.substr(1), str.substr(1));
+            }
+            if (str.empty() || pattern[0] != str[0]) {
+                return false;
+            }
+            return GlobMatch(pattern.substr(1), str.substr(1));
+        }
+
         int NextPowerOf2(int value) {
             value--;
             value |= value >> 1;
@@ -309,6 +348,63 @@ namespace moth_packer {
 
         if (images.empty()) {
             spdlog::info("No images found in {}", inputList.string());
+            return false;
+        }
+
+        dstList.insert(std::end(dstList), std::begin(images), std::end(images));
+        return true;
+    }
+
+    bool CollectImagesFromGlob(std::string const& pattern, std::vector<ImageDetails>& dstList) {
+        // Find the base directory: longest prefix with no wildcard characters
+        auto const normalised = std::filesystem::path(pattern).generic_string();
+        auto const wildcardPos = normalised.find_first_of("*?");
+        std::filesystem::path baseDir;
+        if (wildcardPos == std::string::npos) {
+            baseDir = normalised;
+        } else {
+            auto const lastSep = normalised.rfind('/', wildcardPos);
+            baseDir = lastSep == std::string::npos ? "." : normalised.substr(0, lastSep);
+        }
+
+        if (!std::filesystem::exists(baseDir)) {
+            spdlog::error("Glob base directory does not exist: {}", baseDir.string());
+            return false;
+        }
+
+        std::vector<ImageDetails> images;
+        for (auto&& entry : std::filesystem::recursive_directory_iterator(baseDir)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+            auto const ext = entry.path().extension().string();
+            if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
+                continue;
+            }
+            auto const& imagePath = entry.path();
+            auto const pathStr = imagePath.generic_string();
+            if (!GlobMatch(normalised, pathStr)) {
+                continue;
+            }
+            auto const isDuplicate = [&](ImageDetails const& d) { return d.path == imagePath; };
+            if (ranges::find_if(dstList, isDuplicate) != std::end(dstList) ||
+                ranges::find_if(images, isDuplicate) != std::end(images)) {
+                continue;
+            }
+            ImageDetails details;
+            details.path = imagePath;
+            if (stbi_info(imagePath.string().c_str(),
+                          &details.dimensions.x,
+                          &details.dimensions.y,
+                          &details.channels) != 1) {
+                spdlog::warn("Failed to read image info: {}", pathStr);
+                continue;
+            }
+            images.push_back(details);
+        }
+
+        if (images.empty()) {
+            spdlog::info("No images matched glob: {}", pattern);
             return false;
         }
 

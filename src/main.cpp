@@ -21,6 +21,7 @@ int main(int argc, char* argv[]) {
     std::filesystem::path inputDir;
     std::filesystem::path inputLayout;
     std::filesystem::path inputLayoutDir;
+    std::string inputGlob;
 
     auto* group = app.add_option_group("input source");
     group->require_option(1);
@@ -36,6 +37,8 @@ int main(int argc, char* argv[]) {
     auto* optionLayoutDir =
         group->add_option("-x,--layout-dir", inputLayoutDir, "Input is a directory of moth_ui layout files.")
             ->check(CLI::ExistingDirectory);
+    auto* optionGlob =
+        group->add_option("-g,--glob", inputGlob, "Input is a glob pattern (e.g. assets/**/*.png).");
 
     bool recursiveInput = false;
     app.add_flag("-r,--recursive", recursiveInput, "Recurse into subdirectories")->default_val(false);
@@ -119,6 +122,8 @@ int main(int argc, char* argv[]) {
         moth_packer::CollectImagesFromLayout(inputLayout, images);
     } else if (optionLayoutDir->count() != 0) {
         moth_packer::CollectImagesFromLayoutsDir(inputLayoutDir, recursiveInput, images);
+    } else if (optionGlob->count() != 0) {
+        moth_packer::CollectImagesFromGlob(inputGlob, images);
     } else {
         spdlog::error("Unknown input source!");
         return 1;

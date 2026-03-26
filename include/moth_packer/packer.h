@@ -19,6 +19,7 @@ namespace moth_packer {
     };
 
     bool CollectImagesFromFile(std::filesystem::path const& inputList, std::vector<ImageDetails>& dstList);
+    bool CollectImagesFromGlob(std::string const& pattern, std::vector<ImageDetails>& dstList);
     bool CollectImagesFromDir(std::filesystem::path const& inputPath,
                               bool const& recursive,
                               std::vector<ImageDetails>& dstList);
