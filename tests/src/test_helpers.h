@@ -60,6 +60,15 @@ inline moth_packer::ImageDetails MakeTestImage(std::filesystem::path const& dir,
     return details;
 }
 
+// Build a PackOptions with outputPath and filename set; all other fields use struct defaults.
+inline moth_packer::PackOptions MakeTestPackOptions(std::filesystem::path const& outputPath,
+                                                    std::string const& filename = "test") {
+    moth_packer::PackOptions opts;
+    opts.outputPath = outputPath;
+    opts.filename = filename;
+    return opts;
+}
+
 // Create a layout file containing image entities pointing to the given absolute image paths.
 // Image paths must be absolute so that GetLoadedPath() / m_imagePath resolves correctly.
 inline std::filesystem::path MakeTestLayout(std::filesystem::path const& dir, std::string const& name, std::vector<std::filesystem::path> const& imagePaths) {

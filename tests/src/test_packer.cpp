@@ -21,13 +21,13 @@ CATCH_REGISTER_LISTENER(SilenceSpdlog)
 
 TEST_CASE("Pack returns false for empty image list", "[pack]") {
     TempDir out;
-    CHECK_FALSE(Pack({}, out.path, "test", false, false, 256, 256, 4096, 4096));
+    CHECK_FALSE(Pack({}, MakeTestPackOptions(out.path)));
 }
 
 TEST_CASE("Pack returns false when output path does not exist", "[pack]") {
     TempDir src;
     auto images = { MakeTestImage(src.path, "a.png", 16, 16) };
-    CHECK_FALSE(Pack({ images }, std::filesystem::path("/nonexistent/path"), "test", false, false, 256, 256, 4096, 4096));
+    CHECK_FALSE(Pack({ images }, MakeTestPackOptions("/nonexistent/path")));
 }
 
 TEST_CASE("Pack returns false when output JSON already exists and forceOverwrite is false", "[pack]") {
@@ -38,7 +38,7 @@ TEST_CASE("Pack returns false when output JSON already exists and forceOverwrite
     // pre-create the descriptor file
     std::ofstream(out.path / "test.json").close();
 
-    CHECK_FALSE(Pack({ images }, out.path, "test", false, false, 256, 256, 4096, 4096));
+    CHECK_FALSE(Pack({ images }, MakeTestPackOptions(out.path)));
 }
 
 TEST_CASE("Pack succeeds when output JSON already exists and forceOverwrite is true", "[pack]") {
@@ -48,7 +48,9 @@ TEST_CASE("Pack succeeds when output JSON already exists and forceOverwrite is t
 
     std::ofstream(out.path / "test.json").close();
 
-    CHECK(Pack({ images }, out.path, "test", true, false, 256, 256, 4096, 4096));
+    auto opts = MakeTestPackOptions(out.path);
+    opts.forceOverwrite = true;
+    CHECK(Pack({ images }, opts));
 }
 
 TEST_CASE("Pack dry run returns true and writes no files", "[pack]") {
@@ -56,7 +58,9 @@ TEST_CASE("Pack dry run returns true and writes no files", "[pack]") {
     TempDir out;
     auto images = { MakeTestImage(src.path, "a.png", 16, 16) };
 
-    CHECK(Pack({ images }, out.path, "test", false, true, 256, 256, 4096, 4096));
+    auto opts = MakeTestPackOptions(out.path);
+    opts.dryRun = true;
+    CHECK(Pack({ images }, opts));
     CHECK_FALSE(std::filesystem::exists(out.path / "test.json"));
     CHECK_FALSE(std::filesystem::exists(out.path / "test_0.png"));
 }
@@ -66,7 +70,7 @@ TEST_CASE("Pack writes JSON descriptor and atlas PNG on success", "[pack]") {
     TempDir out;
     auto images = { MakeTestImage(src.path, "a.png", 16, 16) };
 
-    CHECK(Pack({ images }, out.path, "test", false, false, 256, 256, 4096, 4096));
+    CHECK(Pack({ images }, MakeTestPackOptions(out.path)));
     CHECK(std::filesystem::exists(out.path / "test.json"));
     CHECK(std::filesystem::exists(out.path / "test_0.png"));
 }
@@ -82,7 +86,12 @@ TEST_CASE("Pack skips images that exceed max atlas dimensions", "[pack]") {
     };
 
     // max is 32x32, so big.png should be skipped but small.png still packs
-    CHECK(moth_packer::Pack(images, out.path, "test", false, false, 16, 16, 32, 32));
+    auto opts = MakeTestPackOptions(out.path);
+    opts.minWidth = 16;
+    opts.minHeight = 16;
+    opts.maxWidth = 32;
+    opts.maxHeight = 32;
+    CHECK(Pack(images, opts));
     CHECK(std::filesystem::exists(out.path / "test.json"));
 }
 
@@ -97,7 +106,12 @@ TEST_CASE("Pack produces multiple atlases when images do not fit in one", "[pack
         MakeTestImage(src.path, "c.png", 32, 32),
     };
 
-    CHECK(moth_packer::Pack(images, out.path, "test", false, false, 32, 32, 32, 32));
+    auto opts = MakeTestPackOptions(out.path);
+    opts.minWidth = 32;
+    opts.minHeight = 32;
+    opts.maxWidth = 32;
+    opts.maxHeight = 32;
+    CHECK(Pack(images, opts));
     CHECK(std::filesystem::exists(out.path / "test_0.png"));
     CHECK(std::filesystem::exists(out.path / "test_1.png"));
     CHECK(std::filesystem::exists(out.path / "test_2.png"));
@@ -110,7 +124,12 @@ TEST_CASE("Pack returns true with empty atlases when all images exceed max dimen
     // image is 64x64 but max atlas is 32x32
     std::vector<moth_packer::ImageDetails> images = { MakeTestImage(src.path, "big.png", 64, 64) };
 
-    CHECK(moth_packer::Pack(images, out.path, "test", false, false, 32, 32, 32, 32));
+    auto opts = MakeTestPackOptions(out.path);
+    opts.minWidth = 32;
+    opts.minHeight = 32;
+    opts.maxWidth = 32;
+    opts.maxHeight = 32;
+    CHECK(Pack(images, opts));
     REQUIRE(std::filesystem::exists(out.path / "test.json"));
     std::ifstream f(out.path / "test.json");
     CHECK(nlohmann::json::parse(f)["atlases"].empty());
@@ -122,7 +141,7 @@ TEST_CASE("Pack JSON rect values match image dimensions and are within atlas bou
     TempDir out;
     auto const image = MakeTestImage(src.path, "a.png", 16, 32);
 
-    REQUIRE(Pack({ image }, out.path, "test", false, false, 256, 256, 4096, 4096));
+    REQUIRE(Pack({ image }, MakeTestPackOptions(out.path)));
 
     std::ifstream f(out.path / "test.json");
     auto const json = nlohmann::json::parse(f);
@@ -156,7 +175,7 @@ TEST_CASE("Pack JSON descriptor contains correct relative paths", "[pack]") {
         image = MakeTestImage(root.path, "a.png", 16, 16);
     }
 
-    REQUIRE(Pack({ image }, outPath, "test", false, false, 256, 256, 4096, 4096));
+    REQUIRE(Pack({ image }, MakeTestPackOptions(outPath)));
 
     std::ifstream f(outPath / "test.json");
     auto const json = nlohmann::json::parse(f);
