@@ -331,7 +331,7 @@ namespace moth_packer {
 
     bool CollectImagesFromGlob(std::string const& pattern, std::vector<ImageDetails>& dstList) {
         std::vector<ImageDetails> images;
-        for (auto&& matchPath : glob::glob(pattern)) {
+        for (auto&& matchPath : glob::rglob(pattern)) {
             auto const ext = matchPath.extension().string();
             if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
                 continue;
