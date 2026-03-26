@@ -568,10 +568,17 @@ namespace moth_packer {
 
         if (!options.dryRun) {
             std::ofstream ofile(packDetailsPath);
-            if (ofile.is_open()) {
-                nlohmann::json root;
-                root["atlases"] = atlases;
-                ofile << (options.prettyJson ? root.dump(4) : root.dump());
+            if (!ofile.is_open()) {
+                spdlog::error("Failed to open descriptor for writing: {}", packDetailsPath.string());
+                return false;
+            }
+            nlohmann::json root;
+            root["atlases"] = atlases;
+            ofile << (options.prettyJson ? root.dump(4) : root.dump());
+            ofile.flush();
+            if (ofile.fail()) {
+                spdlog::error("Failed to write descriptor: {}", packDetailsPath.string());
+                return false;
             }
         }
 
