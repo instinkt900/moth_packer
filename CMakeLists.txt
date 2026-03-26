@@ -63,10 +63,13 @@ install(DIRECTORY include/ DESTINATION include)
 # ---------------------------------------------------------------------------
 
 if(MOTH_PACKER_BUILD_CLI)
+    add_library(glob INTERFACE)
+    target_include_directories(glob INTERFACE external/glob)
+
     add_executable(moth_packer_cli src/main.cpp)
     set_target_properties(moth_packer_cli PROPERTIES OUTPUT_NAME moth_packer)
     target_compile_definitions(moth_packer_cli PRIVATE MOTH_PACKER_VERSION="${MOTH_PACKER_VERSION}")
-    target_link_libraries(moth_packer_cli PRIVATE moth_packer CLI11::CLI11 spdlog::spdlog)
+    target_link_libraries(moth_packer_cli PRIVATE moth_packer CLI11::CLI11 spdlog::spdlog glob)
 
     if(MSVC)
         target_compile_definitions(moth_packer_cli PRIVATE _CRT_SECURE_NO_WARNINGS)
