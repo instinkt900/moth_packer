@@ -28,11 +28,13 @@ A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_u
 
 ## Features
 
-**Multiple input modes** — point moth_packer at a directory of images, a plain text file listing image paths, a single moth_ui layout file, or a directory of layout files. Recursive directory traversal is supported for all directory-based modes.
+**Multiple input modes** — point moth_packer at a directory of images, a glob pattern, a plain text file listing image paths, a single moth_ui layout file, or a directory of layout files. Recursive directory traversal is supported for all directory-based modes.
 
 **Automatic atlas sizing** — the packer tests power-of-two atlas dimensions between configurable min and max sizes and picks the most space-efficient fit. When images don't all fit in one atlas, additional atlases are created automatically.
 
 **Single JSON descriptor** — all atlases produced in one run are described in a single `.json` file, making it straightforward to load an entire pack at runtime without enumerating files.
+
+**Configurable padding** — add a pixel border around each image with four fill modes: solid colour (`color`), clamp-to-edge (`extend`), mirrored reflection (`mirror`), or tiling wrap (`wrap`).
 
 **Overwrite protection** — by default the packer refuses to overwrite existing output files. Pass `--force` to override.
 
@@ -60,6 +62,7 @@ Exactly one input mode must be specified:
 |---|---|
 | `-i, --file <path>` | Text file containing one image path per line |
 | `-d, --dir <path>` | Directory of images |
+| `-g, --glob <pattern>` | Glob pattern (e.g. `assets/**/*.png`) |
 | `-l, --layout <path>` | Single moth_ui layout file |
 | `-x, --layout-dir <path>` | Directory of moth_ui layout files |
 
@@ -72,6 +75,11 @@ Exactly one input mode must be specified:
 | `-f, --force` | off | Overwrite existing output files |
 | `-n, --min <w,h>` | `256,256` | Minimum atlas dimensions |
 | `-m, --max <w,h>` | `4096,4096` | Maximum atlas dimensions |
+| `-p, --padding <n>` | `0` | Pixels of padding added around each image on all sides |
+| `-t, --padding-type <type>` | `color` | Padding fill mode: `color`, `extend`, `mirror`, or `wrap` |
+| `-c, --padding-color <RRGGBBAA>` | `00000000` | Padding colour as 8 hex digits (used when `--padding-type color`) |
+| `--pretty` | off | Pretty-print the JSON descriptor with 4-space indentation |
+| `--absolute-paths` | off | Write absolute paths in the JSON descriptor instead of paths relative to the output directory |
 | `--dry-run` | off | Report what would be packed without writing any files |
 | `--verbose` | off | Print a line for every image packed |
 | `--silent` | off | Suppress all output except errors |
@@ -92,6 +100,16 @@ moth_packer hud -l layouts/hud.moth_layout -o build/atlases
 Pack images from a text file list, allowing up to 2048×2048 atlases:
 ```bash
 moth_packer sprites -i sprites.txt -m 2048,2048 -o build/atlases
+```
+
+Pack images matching a glob pattern:
+```bash
+moth_packer sprites -g 'assets/**/*.png' -o build/atlases
+```
+
+Pack with 2-pixel extend padding and pretty-printed JSON:
+```bash
+moth_packer ui -d assets/images -p 2 -t extend --pretty -o build/atlases
 ```
 
 Preview what would be packed without writing anything:
@@ -125,7 +143,7 @@ Each run produces one `<name>.json` descriptor and one or more `<name>_N.png` at
 }
 ```
 
-All paths in the descriptor are relative to the output directory.
+Paths in the descriptor are relative to the output directory by default. Pass `--absolute-paths` to write absolute paths instead.
 
 ---
 
