@@ -12,6 +12,7 @@
 #include "stb_rect_pack.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -287,6 +288,10 @@ namespace moth_packer {
         std::vector<ImageDetails> images;
 
         std::ifstream file(inputList);
+        if (!file.is_open()) {
+            spdlog::error("Failed to open input list: {} ({})", inputList.string(), strerror(errno));
+            return false;
+        }
         std::string line;
         while (std::getline(file, line)) {
             if (line.empty()) {
