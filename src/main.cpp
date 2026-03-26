@@ -142,20 +142,22 @@ int main(int argc, char* argv[]) {
 
     std::filesystem::create_directories(outputDir);
 
-    bool result = moth_packer::Pack(images,
-                                    outputDir,
-                                    outputName,
-                                    forceOverwrite,
-                                    dryRun,
-                                    minDimensions.first,
-                                    minDimensions.second,
-                                    maxDimensions.first,
-                                    maxDimensions.second,
-                                    padding,
-                                    paddingType,
-                                    paddingColor,
-                                    prettyJson,
-                                    absolutePaths);
+    moth_packer::PackOptions packOptions;
+    packOptions.outputPath = outputDir;
+    packOptions.filename = outputName;
+    packOptions.forceOverwrite = forceOverwrite;
+    packOptions.dryRun = dryRun;
+    packOptions.minWidth = minDimensions.first;
+    packOptions.minHeight = minDimensions.second;
+    packOptions.maxWidth = maxDimensions.first;
+    packOptions.maxHeight = maxDimensions.second;
+    packOptions.padding = padding;
+    packOptions.paddingType = paddingType;
+    packOptions.paddingColor = paddingColor;
+    packOptions.prettyJson = prettyJson;
+    packOptions.absolutePaths = absolutePaths;
+
+    bool result = moth_packer::Pack(images, packOptions);
 
     return result ? 0 : 1;
 }

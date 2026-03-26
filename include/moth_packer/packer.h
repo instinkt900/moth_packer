@@ -29,19 +29,22 @@ namespace moth_packer {
                                      bool recursive,
                                      std::vector<ImageDetails>& dstList);
 
-    bool Pack(std::vector<ImageDetails> images,
-              std::filesystem::path const& outputPath,
-              std::string const& filename,
-              bool forceOverwrite,
-              bool dryRun,
-              int minWidth,
-              int minHeight,
-              int maxWidth,
-              int maxHeight,
-              int padding,
-              PaddingType paddingType,
-              uint32_t paddingColor,
-              bool prettyJson,
-              bool absolutePaths);
+    struct PackOptions {
+        std::filesystem::path outputPath;
+        std::string filename;
+        bool forceOverwrite = false;
+        bool dryRun = false;
+        int minWidth = 256;
+        int minHeight = 256;
+        int maxWidth = 4096;
+        int maxHeight = 4096;
+        int padding = 0;
+        PaddingType paddingType = PaddingType::Color;
+        uint32_t paddingColor = 0;
+        bool prettyJson = false;
+        bool absolutePaths = false;
+    };
+
+    bool Pack(std::vector<ImageDetails> images, PackOptions const& options);
 
 } // namespace moth_packer

@@ -460,26 +460,13 @@ namespace moth_packer {
         return true;
     }
 
-    bool Pack(std::vector<ImageDetails> images,
-              std::filesystem::path const& outputPath,
-              std::string const& filename,
-              bool forceOverwrite,
-              bool dryRun,
-              int minWidth,
-              int minHeight,
-              int maxWidth,
-              int maxHeight,
-              int padding,
-              PaddingType paddingType,
-              uint32_t paddingColor,
-              bool prettyJson,
-              bool absolutePaths) {
+    bool Pack(std::vector<ImageDetails> images, PackOptions const& options) {
         if (images.empty()) {
             spdlog::error("No images to pack!");
             return false;
         }
-        if (!std::filesystem::exists(outputPath)) {
-            spdlog::error("Output path does not exist: {}", outputPath.string());
+        if (!std::filesystem::exists(options.outputPath)) {
+            spdlog::error("Output path does not exist: {}", options.outputPath.string());
             return false;
         }
 
@@ -489,9 +476,9 @@ namespace moth_packer {
         for (auto&& image : images) {
             stbrp_rect r;
             r.id = i;
-            r.w = image.dimensions.x + (padding * 2);
-            r.h = image.dimensions.y + (padding * 2);
-            if (r.w <= maxWidth && r.h <= maxHeight) {
+            r.w = image.dimensions.x + (options.padding * 2);
+            r.h = image.dimensions.y + (options.padding * 2);
+            if (r.w <= options.maxWidth && r.h <= options.maxHeight) {
                 stbRects.push_back(r);
             } else {
                 spdlog::warn("Image {} exceeds max atlas size, skipping", image.path.string());
@@ -499,34 +486,35 @@ namespace moth_packer {
             ++i;
         }
 
-        auto const packDetailsPath = outputPath / fmt::format("{}.json", filename);
-        if (!forceOverwrite && std::filesystem::exists(packDetailsPath)) {
+        auto const packDetailsPath = options.outputPath / fmt::format("{}.json", options.filename);
+        if (!options.forceOverwrite && std::filesystem::exists(packDetailsPath)) {
             spdlog::error("Destination exists: {}", packDetailsPath.string());
             return false;
         }
 
-        std::vector<stbrp_node> stbNodes(maxWidth * 2);
+        std::vector<stbrp_node> stbNodes(options.maxWidth * 2);
 
         nlohmann::json atlases;
         int numPacks = 0;
         for (; !stbRects.empty(); ++numPacks) {
-            auto const imagePngPath = outputPath / fmt::format("{}_{}.png", filename, numPacks);
+            auto const imagePngPath = options.outputPath / fmt::format("{}_{}.png", options.filename, numPacks);
 
-            if (!forceOverwrite && std::filesystem::exists(imagePngPath)) {
+            if (!options.forceOverwrite && std::filesystem::exists(imagePngPath)) {
                 // previously an error, but downgraded to a warning since we still continue.
                 spdlog::warn("Destination exists: {}", imagePngPath.string());
                 continue;
             }
 
-            auto const packDim =
-                FindOptimalDimensions(stbNodes, stbRects, { minWidth, minHeight }, { maxWidth, maxHeight });
+            auto const packDim = FindOptimalDimensions(
+                stbNodes, stbRects, { options.minWidth, options.minHeight }, { options.maxWidth, options.maxHeight });
 
             stbrp_context stbContext;
             stbrp_init_target(
                 &stbContext, packDim.x, packDim.y, stbNodes.data(), static_cast<int>(stbNodes.size()));
             stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
             auto const atlasJson = CommitPack(
-                imagePngPath, outputPath, dryRun, packDim.x, packDim.y, stbRects, images, padding, paddingType, paddingColor, absolutePaths);
+                imagePngPath, options.outputPath, options.dryRun, packDim.x, packDim.y, stbRects, images,
+                options.padding, options.paddingType, options.paddingColor, options.absolutePaths);
             if (atlasJson.empty()) {
                 // empty return from commit pack means something bad happened
                 return false;
@@ -534,12 +522,12 @@ namespace moth_packer {
             atlases.push_back(atlasJson);
         }
 
-        if (!dryRun) {
+        if (!options.dryRun) {
             std::ofstream ofile(packDetailsPath);
             if (ofile.is_open()) {
                 nlohmann::json root;
                 root["atlases"] = atlases;
-                ofile << (prettyJson ? root.dump(4) : root.dump());
+                ofile << (options.prettyJson ? root.dump(4) : root.dump());
             }
         }
 
