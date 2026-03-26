@@ -69,8 +69,8 @@ namespace moth_packer {
         int maxWidth = 4096;                        ///< Maximum atlas width (rounded up to the next power of two).
         int maxHeight = 4096;                       ///< Maximum atlas height (rounded up to the next power of two).
         int padding = 0;                            ///< Pixels of padding added around each image on all sides.
-        PaddingType paddingType = PaddingType::Color; ///< How the padding border is filled.
-        uint32_t paddingColor = 0;                  ///< Padding colour as RRGGBBAA when paddingType is Color.
+        PaddingType paddingType = PaddingType::Color; ///< How the padding border pixels are filled (Color is a no-op; the atlas background handles it).
+        uint32_t paddingColor = 0;                  ///< Atlas background colour as RRGGBBAA. Applied to the entire atlas before compositing, so it fills padding regions and any unpacked areas.
         bool prettyJson = false;                    ///< Pretty-print the JSON descriptor with 4-space indentation.
         bool absolutePaths = false;                 ///< Write absolute paths in the JSON descriptor instead of paths relative to outputPath.
     };

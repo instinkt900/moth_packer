@@ -161,7 +161,21 @@ namespace moth_packer {
                                   uint32_t paddingColor,
                                   bool absolutePaths) {
             int const atlasChannels = 4;
-            std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels, 0);
+            std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels);
+
+            // Pre-fill the entire atlas with paddingColor. This sets the background colour
+            // for the atlas (visible in padding regions and any unpacked areas) and makes
+            // the PaddingType::Color border fill a no-op.
+            uint8_t const bg_r = static_cast<uint8_t>((paddingColor >> 24) & 0xFF);
+            uint8_t const bg_g = static_cast<uint8_t>((paddingColor >> 16) & 0xFF);
+            uint8_t const bg_b = static_cast<uint8_t>((paddingColor >> 8) & 0xFF);
+            uint8_t const bg_a = static_cast<uint8_t>(paddingColor & 0xFF);
+            for (size_t i = 0; i < atlasPixels.size(); i += atlasChannels) {
+                atlasPixels[i + 0] = bg_r;
+                atlasPixels[i + 1] = bg_g;
+                atlasPixels[i + 2] = bg_b;
+                atlasPixels[i + 3] = bg_a;
+            }
 
             nlohmann::json atlasImages;
             for (auto&& rect : rects) {
@@ -207,12 +221,7 @@ namespace moth_packer {
                             auto const dstOffset = (static_cast<size_t>(py) * width + px) * atlasChannels;
                             switch (paddingType) {
                             case PaddingType::Color:
-                                atlasPixels[dstOffset + 0] =
-                                    static_cast<uint8_t>((paddingColor >> 24) & 0xFF);
-                                atlasPixels[dstOffset + 1] =
-                                    static_cast<uint8_t>((paddingColor >> 16) & 0xFF);
-                                atlasPixels[dstOffset + 2] = static_cast<uint8_t>((paddingColor >> 8) & 0xFF);
-                                atlasPixels[dstOffset + 3] = static_cast<uint8_t>(paddingColor & 0xFF);
+                                // Atlas is pre-filled with paddingColor — nothing to do.
                                 break;
                             case PaddingType::Extend: {
                                 int const csx = std::clamp(sx, 0, srcWidth - 1);

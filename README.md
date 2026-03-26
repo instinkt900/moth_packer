@@ -77,7 +77,7 @@ Exactly one input mode must be specified:
 | `-m, --max <w,h>` | `4096,4096` | Maximum atlas dimensions |
 | `-p, --padding <n>` | `0` | Pixels of padding added around each image on all sides |
 | `-t, --padding-type <type>` | `color` | Padding fill mode: `color`, `extend`, `mirror`, or `wrap` |
-| `-c, --padding-color <RRGGBBAA>` | `00000000` | Padding colour as 8 hex digits (used when `--padding-type color`) |
+| `-c, --padding-color <RRGGBBAA>` | `00000000` | Atlas background colour as 8 hex digits; fills the entire atlas before compositing, controlling padding regions and unpacked areas |
 | `--pretty` | off | Pretty-print the JSON descriptor with 4-space indentation |
 | `--absolute-paths` | off | Write absolute paths in the JSON descriptor instead of paths relative to the output directory |
 | `--dry-run` | off | Report what would be packed without writing any files |
