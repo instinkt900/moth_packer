@@ -26,7 +26,7 @@ namespace moth_packer {
     /// @return True if at least one image was added.
     bool CollectImagesFromFile(std::filesystem::path const& inputList, std::vector<ImageDetails>& dstList);
 
-    /// @brief Collect images whose paths match a glob pattern (e.g. "assets/**\/*.png").
+    /// @brief Collect images whose paths match a glob pattern (e.g. "assets/**/*.png").
     /// @param pattern Glob pattern. Quote the argument on the command line to prevent shell expansion.
     /// @param dstList List to append discovered images to. Duplicates are skipped.
     /// @return True if at least one image was added.
