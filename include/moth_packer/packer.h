@@ -90,4 +90,27 @@ namespace moth_packer {
     ///         an image that fails to load during compositing, or a file-write failure.
     bool Pack(std::vector<ImageDetails> images, PackOptions const& options);
 
+    /// @deprecated Use Pack(images, PackOptions) instead.
+    [[deprecated("Use Pack(images, PackOptions) instead")]]
+    inline bool Pack(std::vector<ImageDetails> images,
+                     std::filesystem::path outputPath,
+                     std::string filename,
+                     bool forceOverwrite = false,
+                     bool dryRun = false,
+                     int minWidth = 256,
+                     int minHeight = 256,
+                     int maxWidth = 4096,
+                     int maxHeight = 4096) {
+        PackOptions opts;
+        opts.outputPath    = std::move(outputPath);
+        opts.filename      = std::move(filename);
+        opts.forceOverwrite = forceOverwrite;
+        opts.dryRun        = dryRun;
+        opts.minWidth      = minWidth;
+        opts.minHeight     = minHeight;
+        opts.maxWidth      = maxWidth;
+        opts.maxHeight     = maxHeight;
+        return Pack(std::move(images), opts);
+    }
+
 } // namespace moth_packer
