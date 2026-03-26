@@ -348,6 +348,7 @@ namespace moth_packer {
         for (auto&& matchPath : glob::rglob(pattern)) {
             auto const ext = matchPath.extension().string();
             if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
+                spdlog::warn("Unsupported image format, skipping: {}", matchPath.string());
                 continue;
             }
             auto const isDuplicate = [&](ImageDetails const& d) { return d.path == matchPath; };
@@ -393,6 +394,7 @@ namespace moth_packer {
                 }
                 auto const ext = entry.path().extension().string();
                 if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
+                    spdlog::warn("Unsupported image format, skipping: {}", entry.path().string());
                     continue;
                 }
                 auto const& imagePath = entry.path();
