@@ -82,9 +82,9 @@ namespace moth_packer {
                                                std::vector<stbrp_rect>& rects,
                                                moth_ui::IntVec2 const& minPack,
                                                moth_ui::IntVec2 const& maxPack) {
-            int totalArea = 0;
+            int64_t totalArea = 0;
             for (auto&& rect : rects) {
-                totalArea += rect.w * rect.h;
+                totalArea += static_cast<int64_t>(rect.w) * rect.h;
             }
 
             struct PackTest {
@@ -102,7 +102,7 @@ namespace moth_packer {
             while (curWidth <= maxDimX) {
                 int curHeight = minDimY;
                 while (curHeight <= maxDimY) {
-                    int const curArea = curWidth * curHeight;
+                    int64_t const curArea = static_cast<int64_t>(curWidth) * curHeight;
                     if (curArea > totalArea) {
                         PackTest info;
                         info.m_dimensions = moth_ui::IntVec2{ curWidth, curHeight };
@@ -128,8 +128,8 @@ namespace moth_packer {
                 auto const allPacked =
                     stbrp_pack_rects(&stbContext, rects.data(), static_cast<int>(rects.size()));
                 if (allPacked != 0) {
-                    float const testArea =
-                        static_cast<float>(testDim.m_dimensions.x * testDim.m_dimensions.y);
+                    float const testArea = static_cast<float>(
+                        static_cast<int64_t>(testDim.m_dimensions.x) * testDim.m_dimensions.y);
                     testDim.m_ratio = static_cast<float>(totalArea) / testArea;
                 }
             }
