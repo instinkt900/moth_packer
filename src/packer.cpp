@@ -550,7 +550,8 @@ namespace moth_packer {
             spdlog::error("PackOptions::maxWidth/maxHeight must be >= minWidth/minHeight");
             return false;
         }
-        if (options.jpegQuality < 1 || options.jpegQuality > 100) {
+        if (options.format == AtlasFormat::JPEG &&
+            (options.jpegQuality < 1 || options.jpegQuality > 100)) {
             spdlog::error("PackOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
             return false;
         }
