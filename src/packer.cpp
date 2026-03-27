@@ -81,8 +81,11 @@ namespace moth_packer {
             case AtlasFormat::BMP:  return ".bmp";
             case AtlasFormat::TGA:  return ".tga";
             case AtlasFormat::JPEG: return ".jpg";
+            default:
+                spdlog::warn("Unknown AtlasFormat value ({}); defaulting to .png",
+                             static_cast<int>(format));
+                return ".png";
             }
-            return ".png";
         }
 
         int NextPowerOf2(int value) {
@@ -545,6 +548,10 @@ namespace moth_packer {
         }
         if (options.maxWidth < options.minWidth || options.maxHeight < options.minHeight) {
             spdlog::error("PackOptions::maxWidth/maxHeight must be >= minWidth/minHeight");
+            return false;
+        }
+        if (options.jpegQuality < 1 || options.jpegQuality > 100) {
+            spdlog::error("PackOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
             return false;
         }
         // Guard against overflow in maxWidth*2 (stbNodes) and unrealistic atlas sizes.
