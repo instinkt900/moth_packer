@@ -12,6 +12,14 @@ namespace moth_packer {
         int channels = 0;
     };
 
+    /// Output image format for atlas files.
+    enum class AtlasFormat {
+        PNG,   ///< PNG (lossless, supports alpha).
+        BMP,   ///< BMP (uncompressed, supports alpha).
+        TGA,   ///< TGA (supports alpha, optional RLE).
+        JPEG,  ///< JPEG (lossy, no alpha; see PackOptions::jpegQuality).
+    };
+
     /// Strategy used to fill the padding border around each packed image.
     enum class PaddingType {
         Color,  ///< Fill with a solid colour (see PackOptions::paddingColor).
@@ -73,6 +81,8 @@ namespace moth_packer {
         uint32_t paddingColor = 0;                  ///< Atlas background colour as RRGGBBAA. Applied to the entire atlas before compositing, so it fills padding regions and any unpacked areas.
         bool prettyJson = false;                    ///< Pretty-print the JSON descriptor with 4-space indentation.
         bool absolutePaths = false;                 ///< Write absolute paths in the JSON descriptor instead of paths relative to outputPath.
+        AtlasFormat format = AtlasFormat::PNG;      ///< Output image format for atlas files.
+        int jpegQuality = 90;                       ///< JPEG encode quality (1–100). Only used when format is AtlasFormat::JPEG.
     };
 
     /// @brief Pack images into one or more texture atlases.

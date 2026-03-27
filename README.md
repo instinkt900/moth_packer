@@ -4,7 +4,7 @@
 [![Release](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml/badge.svg)](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_ui) layouts. Available as both a **C++ library** (for embedding packing into your own tools) and a **command-line tool**. Supports plain image directories, file lists, and moth_ui layout files as input sources. Outputs a single JSON descriptor alongside one or more atlas PNGs.
+A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_ui) layouts. Available as both a **C++ library** (for embedding packing into your own tools) and a **command-line tool**. Supports plain image directories, file lists, and moth_ui layout files as input sources. Outputs a single JSON descriptor alongside one or more atlas images (PNG, BMP, TGA, or JPEG).
 
 ---
 
@@ -52,7 +52,7 @@ AI agents (primarily Claude) are used as tools in this project for tasks such as
 moth_packer <output> [options]
 ```
 
-`<output>` is the base name for the pack (no extension). The packer writes `<output>.json` and `<output>_0.png`, `<output>_1.png`, … to the output directory.
+`<output>` is the base name for the pack (no extension). The packer writes `<output>.json` and `<output>_0.<ext>`, `<output>_1.<ext>`, … to the output directory, where `<ext>` is determined by `--format` (default `png`).
 
 ### Input modes
 
@@ -78,6 +78,8 @@ Exactly one input mode must be specified:
 | `-p, --padding <n>` | `0` | Pixels of padding added around each image on all sides |
 | `-t, --padding-type <type>` | `color` | Padding fill mode: `color`, `extend`, `mirror`, or `wrap` |
 | `-c, --padding-color <RRGGBBAA>` | `00000000` | Atlas background colour as 8 hex digits; fills the entire atlas before compositing, controlling padding regions and unpacked areas |
+| `--format <fmt>` | `png` | Atlas image format: `png`, `bmp`, `tga`, `jpeg` (or `jpg`) |
+| `--jpeg-quality <n>` | `90` | JPEG encode quality 1–100 (only used with `--format jpeg`) |
 | `--pretty` | off | Pretty-print the JSON descriptor with 4-space indentation |
 | `--absolute-paths` | off | Write absolute paths in the JSON descriptor instead of paths relative to the output directory |
 | `--dry-run` | off | Report what would be packed without writing any files |
@@ -121,7 +123,7 @@ moth_packer ui -d assets/images --dry-run --verbose
 
 ## Output format
 
-Each run produces one `<name>.json` descriptor and one or more `<name>_N.png` atlas images. The descriptor lists every atlas and the images packed into it, with their source path and pixel rect within the atlas:
+Each run produces one `<name>.json` descriptor and one or more `<name>_N.<ext>` atlas images (extension matches `--format`, default `png`). The descriptor lists every atlas and the images packed into it, with their source path and pixel rect within the atlas:
 
 ```json
 {

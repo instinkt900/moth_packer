@@ -68,6 +68,26 @@ namespace moth_packer {
             }
         }
 
+        std::string LowerExtension(std::filesystem::path const& path) {
+            auto ext = path.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return ext;
+        }
+
+        std::string FormatExtension(AtlasFormat format) {
+            switch (format) {
+            case AtlasFormat::PNG:  return ".png";
+            case AtlasFormat::BMP:  return ".bmp";
+            case AtlasFormat::TGA:  return ".tga";
+            case AtlasFormat::JPEG: return ".jpg";
+            default:
+                spdlog::warn("Unknown AtlasFormat value ({}); defaulting to .png",
+                             static_cast<int>(format));
+                return ".png";
+            }
+        }
+
         int NextPowerOf2(int value) {
             value--;
             value |= value >> 1;
@@ -147,9 +167,9 @@ namespace moth_packer {
             return std::begin(testDimensions)->m_dimensions;
         }
 
-        // Composites packed rects into a PNG and returns the atlas JSON entry for the descriptor.
+        // Composites packed rects into an atlas image and returns the atlas JSON entry for the descriptor.
         // Erases successfully packed rects from the list. Returns an empty JSON object on failure.
-        nlohmann::json CommitPack(std::filesystem::path const& imagePngPath,
+        nlohmann::json CommitPack(std::filesystem::path const& atlasImagePath,
                                   std::filesystem::path const& outputPath,
                                   bool dryRun,
                                   int width,
@@ -159,7 +179,9 @@ namespace moth_packer {
                                   int padding,
                                   PaddingType paddingType,
                                   uint32_t paddingColor,
-                                  bool absolutePaths) {
+                                  bool absolutePaths,
+                                  AtlasFormat format,
+                                  int jpegQuality) {
             int const atlasChannels = 4;
             std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels);
 
@@ -263,17 +285,33 @@ namespace moth_packer {
                 details["path"] = recordedPath.string();
                 details["rect"] = { { "x", dstX }, { "y", dstY }, { "w", srcWidth }, { "h", srcHeight } };
                 atlasImages.push_back(details);
-                spdlog::info("Packed {} into {}", recordedPath.string(), imagePngPath.string());
+                spdlog::info("Packed {} into {}", recordedPath.string(), atlasImagePath.string());
             }
 
-            if (!dryRun && stbi_write_png(imagePngPath.string().c_str(),
-                                          width,
-                                          height,
-                                          atlasChannels,
-                                          atlasPixels.data(),
-                                          width * atlasChannels) == 0) {
-                spdlog::error("Failed to write atlas PNG: {}", imagePngPath.string());
-                return {};
+            if (!dryRun) {
+                auto const pathStr = atlasImagePath.string();
+                auto const* path = pathStr.c_str();
+                int writeResult = 0;
+                switch (format) {
+                case AtlasFormat::PNG:
+                    writeResult = stbi_write_png(path, width, height, atlasChannels,
+                                                 atlasPixels.data(), width * atlasChannels);
+                    break;
+                case AtlasFormat::BMP:
+                    writeResult = stbi_write_bmp(path, width, height, atlasChannels, atlasPixels.data());
+                    break;
+                case AtlasFormat::TGA:
+                    writeResult = stbi_write_tga(path, width, height, atlasChannels, atlasPixels.data());
+                    break;
+                case AtlasFormat::JPEG:
+                    writeResult = stbi_write_jpg(path, width, height, atlasChannels,
+                                                 atlasPixels.data(), jpegQuality);
+                    break;
+                }
+                if (writeResult == 0) {
+                    spdlog::error("Failed to write atlas image: {}", atlasImagePath.string());
+                    return {};
+                }
             }
 
             rects.erase(ranges::remove_if(rects, [](auto const& r) { return r.was_packed != 0; }),
@@ -281,8 +319,8 @@ namespace moth_packer {
 
             nlohmann::json atlasEntry;
             atlasEntry["atlas"] = absolutePaths
-                                      ? std::filesystem::absolute(imagePngPath).string()
-                                      : std::filesystem::relative(imagePngPath, outputPath).string();
+                                      ? std::filesystem::absolute(atlasImagePath).string()
+                                      : std::filesystem::relative(atlasImagePath, outputPath).string();
             atlasEntry["images"] = atlasImages;
             return atlasEntry;
         }
@@ -307,7 +345,7 @@ namespace moth_packer {
                 continue;
             }
             std::filesystem::path imagePath(line);
-            auto const ext = imagePath.extension().string();
+            auto const ext = LowerExtension(imagePath);
             if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
                 spdlog::warn("Unsupported image format, skipping: {}", line);
                 continue;
@@ -346,8 +384,9 @@ namespace moth_packer {
     bool CollectImagesFromGlob(std::string const& pattern, std::vector<ImageDetails>& dstList) {
         std::vector<ImageDetails> images;
         for (auto&& matchPath : glob::rglob(pattern)) {
-            auto const ext = matchPath.extension().string();
+            auto const ext = LowerExtension(matchPath);
             if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
+                spdlog::warn("Unsupported image format, skipping: {}", matchPath.string());
                 continue;
             }
             auto const isDuplicate = [&](ImageDetails const& d) { return d.path == matchPath; };
@@ -391,8 +430,9 @@ namespace moth_packer {
                 if (!entry.is_regular_file()) {
                     continue;
                 }
-                auto const ext = entry.path().extension().string();
+                auto const ext = LowerExtension(entry.path());
                 if (kSupportedExtensions.find(ext) == std::end(kSupportedExtensions)) {
+                    spdlog::warn("Unsupported image format, skipping: {}", entry.path().string());
                     continue;
                 }
                 auto const& imagePath = entry.path();
@@ -510,6 +550,11 @@ namespace moth_packer {
             spdlog::error("PackOptions::maxWidth/maxHeight must be >= minWidth/minHeight");
             return false;
         }
+        if (options.format == AtlasFormat::JPEG &&
+            (options.jpegQuality < 1 || options.jpegQuality > 100)) {
+            spdlog::error("PackOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
+            return false;
+        }
         // Guard against overflow in maxWidth*2 (stbNodes) and unrealistic atlas sizes.
         constexpr int kMaxAtlasDim = 65536;
         if (options.maxWidth > kMaxAtlasDim || options.maxHeight > kMaxAtlasDim) {
@@ -552,12 +597,12 @@ namespace moth_packer {
         nlohmann::json atlases;
         int numPacks = 0;
         for (; !stbRects.empty(); ++numPacks) {
-            auto const imagePngPath =
-                options.outputPath / fmt::format("{}_{}.png", options.filename, numPacks);
+            auto const atlasImagePath =
+                options.outputPath / fmt::format("{}_{}{}", options.filename, numPacks, FormatExtension(options.format));
 
-            if (!options.forceOverwrite && std::filesystem::exists(imagePngPath)) {
+            if (!options.forceOverwrite && std::filesystem::exists(atlasImagePath)) {
                 // previously an error, but downgraded to a warning since we still continue.
-                spdlog::warn("Destination exists: {}", imagePngPath.string());
+                spdlog::warn("Destination exists: {}", atlasImagePath.string());
                 continue;
             }
 
@@ -570,7 +615,7 @@ namespace moth_packer {
             stbrp_init_target(
                 &stbContext, packDim.x, packDim.y, stbNodes.data(), static_cast<int>(stbNodes.size()));
             stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
-            auto const atlasJson = CommitPack(imagePngPath,
+            auto const atlasJson = CommitPack(atlasImagePath,
                                               options.outputPath,
                                               options.dryRun,
                                               packDim.x,
@@ -580,7 +625,9 @@ namespace moth_packer {
                                               options.padding,
                                               options.paddingType,
                                               options.paddingColor,
-                                              options.absolutePaths);
+                                              options.absolutePaths,
+                                              options.format,
+                                              options.jpegQuality);
             if (atlasJson.empty()) {
                 // empty return from commit pack means something bad happened
                 return false;
