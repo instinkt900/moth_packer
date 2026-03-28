@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
     argv = app.ensure_utf8(argv);
 
     std::string outputName;
-    app.add_option("output", outputName, "Name of the pack to output (no extension).")->required();
+    app.add_option("output", outputName, "Name of the pack to output (no extension). Required unless --unpack is used.");
 
     std::filesystem::path inputTxt;
     std::filesystem::path inputDir;
@@ -39,6 +39,11 @@ int main(int argc, char* argv[]) {
             ->check(CLI::ExistingDirectory);
     auto* optionGlob =
         group->add_option("-g,--glob", inputGlob, "Input is a glob pattern (e.g. assets/**/*.png).");
+
+    std::filesystem::path inputUnpack;
+    auto* optionUnpack =
+        group->add_option("--unpack", inputUnpack, "Extract sprites from a sprite sheet image.")
+            ->check(CLI::ExistingFile);
 
     bool recursiveInput = false;
     app.add_flag("-r,--recursive", recursiveInput, "Recurse into subdirectories")->default_val(false);
@@ -87,6 +92,12 @@ int main(int argc, char* argv[]) {
             return std::to_string(std::stoul(val, nullptr, 16));
         });
 
+    int alphaThreshold = 0;
+    app.add_option("--alpha-threshold", alphaThreshold,
+                   "Alpha threshold for sprite detection in --unpack mode (0-255, default: 0; "
+                   "pixels with alpha > threshold are treated as non-transparent)")
+        ->check(CLI::Range(0, 255));
+
     bool verboseMode = false;
     app.add_flag("--verbose", verboseMode, "Verbose mode. All output not just errors and warnings.")
         ->default_val(false);
@@ -133,6 +144,24 @@ int main(int argc, char* argv[]) {
         spdlog::set_level(spdlog::level::warn);
     }
 
+    std::filesystem::create_directories(outputDir);
+
+    if (optionUnpack->count() != 0) {
+        moth_packer::UnpackOptions unpackOptions;
+        unpackOptions.outputPath     = outputDir;
+        unpackOptions.alphaThreshold = static_cast<uint8_t>(alphaThreshold);
+        unpackOptions.forceOverwrite = forceOverwrite;
+        unpackOptions.dryRun         = dryRun;
+        unpackOptions.format         = atlasFormat;
+        unpackOptions.jpegQuality    = jpegQuality;
+        return moth_packer::Unpack(inputUnpack, unpackOptions) ? 0 : 1;
+    }
+
+    if (outputName.empty()) {
+        spdlog::error("output name is required when packing");
+        return 1;
+    }
+
     std::vector<moth_packer::ImageDetails> images;
     if (optionFile->count() != 0) {
         moth_packer::CollectImagesFromFile(inputTxt, images);
@@ -153,8 +182,6 @@ int main(int argc, char* argv[]) {
         spdlog::error("No images to pack!");
         return 1;
     }
-
-    std::filesystem::create_directories(outputDir);
 
     moth_packer::PackOptions packOptions;
     packOptions.outputPath = outputDir;
