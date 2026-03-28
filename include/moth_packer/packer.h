@@ -122,4 +122,27 @@ namespace moth_packer {
         return Pack(std::move(images), opts);
     }
 
+    /// Options controlling sprite extraction from a sheet image.
+    struct UnpackOptions {
+        std::filesystem::path outputPath;       ///< Directory where extracted sprites are written.
+        std::string spritePrefix = "sprite";    ///< Filename prefix for extracted sprite files (e.g. "sprite" → sprite_0.png).
+        uint8_t alphaThreshold = 0;             ///< Pixels with alpha strictly greater than this are treated as non-transparent.
+        bool forceOverwrite = false;            ///< Overwrite existing sprite files without error.
+        bool dryRun = false;                    ///< Detect sprites and report but do not write any files.
+        AtlasFormat format = AtlasFormat::PNG;  ///< Output image format for extracted sprites.
+        int jpegQuality = 90;                   ///< JPEG encode quality (1–100). Only used when format is AtlasFormat::JPEG.
+    };
+
+    /// @brief Extract individual sprites from a sprite sheet by detecting connected non-transparent regions.
+    ///
+    /// Scans the sheet for pixels with alpha > UnpackOptions::alphaThreshold, groups connected pixels
+    /// (8-connectivity) into components, and saves the bounding rect of each component as a
+    /// separate image file named `<spritePrefix>_N.<ext>`.
+    ///
+    /// @param sheetPath Path to the source sprite sheet image.
+    /// @param options   Extraction configuration.
+    /// @return True if all detected sprites were written successfully (or dryRun is true).
+    ///         Returns false on load failure, invalid options, or any write error.
+    bool Unpack(std::filesystem::path const& sheetPath, UnpackOptions const& options);
+
 } // namespace moth_packer

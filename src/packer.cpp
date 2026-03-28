@@ -12,10 +12,12 @@
 #include "stb_rect_pack.h"
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <queue>
 #include <unordered_set>
 #include <vector>
 
@@ -654,5 +656,164 @@ namespace moth_packer {
         spdlog::info("Packed {} images into {} atlas{}", images.size(), numPacks, numPacks > 1 ? "es" : "");
 
         return true;
+    }
+
+    bool Unpack(std::filesystem::path const& sheetPath, UnpackOptions const& options) {
+        if (!std::filesystem::exists(sheetPath)) {
+            spdlog::error("Sprite sheet does not exist: {}", sheetPath.string());
+            return false;
+        }
+        if (!std::filesystem::exists(options.outputPath)) {
+            spdlog::error("Output path does not exist: {}", options.outputPath.string());
+            return false;
+        }
+        if (options.format == AtlasFormat::JPEG &&
+            (options.jpegQuality < 1 || options.jpegQuality > 100)) {
+            spdlog::error("UnpackOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
+            return false;
+        }
+
+        constexpr int kChannels = 4;
+        int width = 0;
+        int height = 0;
+        int srcChannels = 0;
+        stbi_uc* pixels = stbi_load(sheetPath.string().c_str(), &width, &height, &srcChannels, kChannels);
+        if (pixels == nullptr) {
+            spdlog::error("Failed to load sprite sheet: {}", sheetPath.string());
+            return false;
+        }
+
+        // Sprite detection uses a BFS flood fill over the pixel grid.
+        // A pixel is "active" if its alpha channel exceeds the threshold.
+        // Each BFS seed finds one connected component (sprite), using
+        // 8-connectivity so diagonally touching pixels belong to the same sprite.
+        // The bounding rect of each component is recorded; pixels already
+        // visited by a previous BFS are skipped so each sprite is found once.
+        std::vector<bool> visited(static_cast<size_t>(width) * height, false);
+
+        auto isActive = [&](int x, int y) {
+            return pixels[((static_cast<size_t>(y) * width + x) * kChannels) + 3] > options.alphaThreshold;
+        };
+
+        struct SpriteRect { int x, y, w, h; };
+        std::vector<SpriteRect> sprites;
+
+        // All 8 neighbours: cardinal (N/S/E/W) + diagonal.
+        static constexpr std::array<std::pair<int, int>, 8> kNeighbors{{
+            {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+        }};
+
+        // Scan top-to-bottom, left-to-right. The first unvisited active pixel
+        // seeds a BFS that consumes the entire connected component.
+        for (int sy = 0; sy < height; ++sy) {
+            for (int sx = 0; sx < width; ++sx) {
+                size_t const idx = (static_cast<size_t>(sy) * width) + sx;
+                if (visited[idx] || !isActive(sx, sy)) {
+                    continue;
+                }
+
+                // BFS: expand outward from the seed pixel, tracking the
+                // axis-aligned bounding box as we go.
+                std::queue<std::pair<int, int>> q;
+                q.push({sx, sy});
+                visited[idx] = true;
+                int minX = sx;
+                int maxX = sx;
+                int minY = sy;
+                int maxY = sy;
+
+                while (!q.empty()) {
+                    auto [cx, cy] = q.front();
+                    q.pop();
+                    minX = std::min(minX, cx);
+                    maxX = std::max(maxX, cx);
+                    minY = std::min(minY, cy);
+                    maxY = std::max(maxY, cy);
+
+                    for (auto [dx, dy] : kNeighbors) {
+                        int const nx = cx + dx;
+                        int const ny = cy + dy;
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+                            continue;
+                        }
+                        size_t const nidx = (static_cast<size_t>(ny) * width) + nx;
+                        if (visited[nidx] || !isActive(nx, ny)) {
+                            continue;
+                        }
+                        visited[nidx] = true;
+                        q.push({nx, ny});
+                    }
+                }
+
+                // Convert inclusive max coords to width/height and store.
+                sprites.push_back({minX, minY, maxX - minX + 1, maxY - minY + 1});
+            }
+        }
+
+        spdlog::info("Found {} sprite{} in {}",
+                     sprites.size(),
+                     sprites.size() != 1 ? "s" : "",
+                     sheetPath.filename().string());
+
+        bool success = true;
+        for (size_t i = 0; i < sprites.size(); ++i) {
+            auto const& r = sprites[i];
+            auto const outPath = options.outputPath /
+                fmt::format("{}_{}{}", options.spritePrefix, i, FormatExtension(options.format));
+
+            if (!options.forceOverwrite && std::filesystem::exists(outPath)) {
+                spdlog::error("Destination exists: {}", outPath.string());
+                success = false;
+                continue;
+            }
+
+            if (!options.dryRun) {
+                // Copy the bounding-rect rows from the full sheet into a
+                // tightly-packed buffer, one row at a time.
+                std::vector<stbi_uc> spritePixels(static_cast<size_t>(r.w) * r.h * kChannels);
+                for (int row = 0; row < r.h; ++row) {
+                    auto const srcOff = (static_cast<size_t>(r.y + row) * width + r.x) * kChannels;
+                    auto const dstOff = static_cast<size_t>(row) * r.w * kChannels;
+                    std::memcpy(spritePixels.data() + dstOff, pixels + srcOff,
+                                static_cast<size_t>(r.w) * kChannels);
+                }
+
+                auto const pathStr = outPath.string();
+                auto const* pathCStr = pathStr.c_str();
+                int writeResult = 0;
+                switch (options.format) {
+                case AtlasFormat::PNG:
+                    writeResult = stbi_write_png(pathCStr, r.w, r.h, kChannels,
+                                                 spritePixels.data(), r.w * kChannels);
+                    break;
+                case AtlasFormat::BMP:
+                    writeResult = stbi_write_bmp(pathCStr, r.w, r.h, kChannels, spritePixels.data());
+                    break;
+                case AtlasFormat::TGA:
+                    writeResult = stbi_write_tga(pathCStr, r.w, r.h, kChannels, spritePixels.data());
+                    break;
+                case AtlasFormat::JPEG:
+                    writeResult = stbi_write_jpg(pathCStr, r.w, r.h, kChannels,
+                                                 spritePixels.data(), options.jpegQuality);
+                    break;
+                default:
+                    spdlog::warn("Unknown AtlasFormat value; defaulting to PNG");
+                    writeResult = stbi_write_png(pathCStr, r.w, r.h, kChannels,
+                                                 spritePixels.data(), r.w * kChannels);
+                    break;
+                }
+
+                if (writeResult == 0) {
+                    spdlog::error("Failed to write sprite: {}", outPath.string());
+                    success = false;
+                    continue;
+                }
+            }
+
+            spdlog::info("Extracted sprite {} ({}x{}) to {}", i, r.w, r.h, outPath.string());
+        }
+
+        stbi_image_free(pixels);
+        return success;
     }
 } // namespace moth_packer

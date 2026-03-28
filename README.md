@@ -63,6 +63,7 @@ Exactly one input mode must be specified:
 | `-i, --file <path>` | Text file containing one image path per line |
 | `-d, --dir <path>` | Directory of images |
 | `-g, --glob <pattern>` | Glob pattern (e.g. `assets/**/*.png`) |
+| `--unpack <path>` | Extract sprites from a sprite sheet by detecting non-transparent regions |
 | `-l, --layout <path>` | Single moth_ui layout file |
 | `-x, --layout-dir <path>` | Directory of moth_ui layout files |
 
@@ -82,6 +83,7 @@ Exactly one input mode must be specified:
 | `--jpeg-quality <n>` | `90` | JPEG encode quality 1–100 (only used with `--format jpeg`) |
 | `--pretty` | off | Pretty-print the JSON descriptor with 4-space indentation |
 | `--absolute-paths` | off | Write absolute paths in the JSON descriptor instead of paths relative to the output directory |
+| `--alpha-threshold <n>` | `0` | Alpha threshold for `--unpack` sprite detection (0–255); pixels with alpha > threshold are treated as non-transparent |
 | `--dry-run` | off | Report what would be packed without writing any files |
 | `--verbose` | off | Print a line for every image packed |
 | `--silent` | off | Suppress all output except errors |
@@ -112,6 +114,16 @@ moth_packer sprites -g 'assets/**/*.png' -o build/atlases
 Pack with 2-pixel extend padding and pretty-printed JSON:
 ```bash
 moth_packer ui -d assets/images -p 2 -t extend --pretty -o build/atlases
+```
+
+Extract sprites from a sprite sheet (transparent background):
+```bash
+moth_packer --unpack sheet.png -o sprites/
+```
+
+Extract sprites ignoring near-transparent edge pixels (e.g. from JPEG compression):
+```bash
+moth_packer --unpack sheet.png --alpha-threshold 10 -o sprites/
 ```
 
 Preview what would be packed without writing anything:
