@@ -84,7 +84,7 @@ int main(int argc, char* argv[]) {
                                                              { "wrap", moth_packer::PaddingType::Wrap } }));
 
     uint32_t paddingColor = 0;
-    app.add_option("-c,--padding-color", paddingColor, "Padding colour as RRGGBBAA hex")
+    app.add_option("-c,--padding-color", paddingColor, "Padding color as RRGGBBAA hex")
         ->transform([](std::string const& val) -> std::string {
             if (val.size() != 8 || val.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
                 throw CLI::ValidationError("-c,--padding-color", "must be exactly 8 hex digits");

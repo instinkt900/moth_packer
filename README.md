@@ -34,9 +34,9 @@ A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_u
 
 **Single JSON descriptor** — all atlases produced in one run are described in a single `.json` file, making it straightforward to load an entire pack at runtime without enumerating files.
 
-**Configurable padding** — add a pixel border around each image with four fill modes: solid colour (`color`), clamp-to-edge (`extend`), mirrored reflection (`mirror`), or tiling wrap (`wrap`).
+**Configurable padding** — add a pixel border around each image with four fill modes: solid color (`color`), clamp-to-edge (`extend`), mirrored reflection (`mirror`), or tiling wrap (`wrap`).
 
-**Overwrite protection** — by default the packer refuses to overwrite existing output files and treats all images being skipped (oversized) as an error. Pass `--force` to override both behaviours.
+**Overwrite protection** — by default the packer refuses to overwrite existing output files and treats all images being skipped (oversized) as an error. Pass `--force` to override both behaviors.
 
 **Dry run** — see what would be packed and what output files would be written without touching the filesystem.
 
@@ -78,7 +78,7 @@ Exactly one input mode must be specified:
 | `-m, --max <w,h>` | `4096,4096` | Maximum atlas dimensions |
 | `-p, --padding <n>` | `0` | Pixels of padding added around each image on all sides |
 | `-t, --padding-type <type>` | `color` | Padding fill mode: `color`, `extend`, `mirror`, or `wrap` |
-| `-c, --padding-color <RRGGBBAA>` | `00000000` | Atlas background colour as 8 hex digits; fills the entire atlas before compositing, controlling padding regions and unpacked areas |
+| `-c, --padding-color <RRGGBBAA>` | `00000000` | Atlas background color as 8 hex digits; fills the entire atlas before compositing, controlling padding regions and unpacked areas |
 | `--format <fmt>` | `png` | Atlas image format: `png`, `bmp`, `tga`, `jpeg` (or `jpg`) |
 | `--jpeg-quality <n>` | `90` | JPEG encode quality 1–100 (only used with `--format jpeg`) |
 | `--pretty` | off | Pretty-print the JSON descriptor with 4-space indentation |

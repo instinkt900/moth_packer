@@ -187,7 +187,7 @@ namespace moth_packer {
             int const atlasChannels = 4;
             std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels);
 
-            // Pre-fill the entire atlas with paddingColor. This sets the background colour
+            // Pre-fill the entire atlas with paddingColor. This sets the background color
             // for the atlas (visible in padding regions and any unpacked areas) and makes
             // the PaddingType::Color border fill a no-op.
             uint8_t const bg_r = static_cast<uint8_t>((paddingColor >> 24) & 0xFF);
@@ -698,7 +698,7 @@ namespace moth_packer {
         struct SpriteRect { int x, y, w, h; };
         std::vector<SpriteRect> sprites;
 
-        // All 8 neighbours: cardinal (N/S/E/W) + diagonal.
+        // All 8 neighbors: cardinal (N/S/E/W) + diagonal.
         static constexpr std::array<std::pair<int, int>, 8> kNeighbors{{
             {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
         }};

@@ -22,7 +22,7 @@ namespace moth_packer {
 
     /// Strategy used to fill the padding border around each packed image.
     enum class PaddingType {
-        Color,  ///< Fill with a solid colour (see PackOptions::paddingColor).
+        Color,  ///< Fill with a solid color (see PackOptions::paddingColor).
         Extend, ///< Repeat the nearest edge pixel outward.
         Mirror, ///< Reflect pixels across each edge.
         Wrap,   ///< Tile pixels from the opposite edge.
@@ -78,7 +78,7 @@ namespace moth_packer {
         int maxHeight = 4096;                       ///< Maximum atlas height (rounded up to the next power of two).
         int padding = 0;                            ///< Pixels of padding added around each image on all sides.
         PaddingType paddingType = PaddingType::Color; ///< How the padding border pixels are filled (Color is a no-op; the atlas background handles it).
-        uint32_t paddingColor = 0;                  ///< Atlas background colour as RRGGBBAA. Applied to the entire atlas before compositing, so it fills padding regions and any unpacked areas.
+        uint32_t paddingColor = 0;                  ///< Atlas background color as RRGGBBAA. Applied to the entire atlas before compositing, so it fills padding regions and any unpacked areas.
         bool prettyJson = false;                    ///< Pretty-print the JSON descriptor with 4-space indentation.
         bool absolutePaths = false;                 ///< Write absolute paths in the JSON descriptor instead of paths relative to outputPath.
         AtlasFormat format = AtlasFormat::PNG;      ///< Output image format for atlas files.
