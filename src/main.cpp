@@ -183,12 +183,13 @@ int main(int argc, char* argv[]) {
         ->default_val(false);
 
     bool verboseMode = false;
-    app.add_flag("--verbose", verboseMode, "Enable verbose output (info-level messages).")
+    auto* flagVerbose = app.add_flag("--verbose", verboseMode, "Enable verbose output (info-level messages).")
         ->default_val(false);
 
     bool silentMode = false;
     app.add_flag("--silent", silentMode, "Suppress all output including warnings.")
-        ->default_val(false);
+        ->default_val(false)
+        ->excludes(flagVerbose);
 
     // --- Input source (pack and flipbook) ---
     auto* inputGroup = app.add_option_group("input source (required for pack and flipbook modes)");

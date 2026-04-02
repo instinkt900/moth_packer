@@ -842,6 +842,19 @@ namespace moth_packer {
             spdlog::error("FlipbookOptions::fps must be positive (got {})", options.fps);
             return false;
         }
+        if (options.frameWidth < 0) {
+            spdlog::error("FlipbookOptions::frameWidth must be non-negative (got {})", options.frameWidth);
+            return false;
+        }
+        if (options.frameHeight < 0) {
+            spdlog::error("FlipbookOptions::frameHeight must be non-negative (got {})", options.frameHeight);
+            return false;
+        }
+        if (options.maxAtlasWidth <= 0 || options.maxAtlasHeight <= 0) {
+            spdlog::error("FlipbookOptions::maxAtlasWidth/maxAtlasHeight must be positive (got {}x{})",
+                          options.maxAtlasWidth, options.maxAtlasHeight);
+            return false;
+        }
         if (options.format == AtlasFormat::JPEG &&
             (options.jpegQuality < 1 || options.jpegQuality > 100)) {
             spdlog::error("FlipbookOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
@@ -1018,8 +1031,8 @@ namespace moth_packer {
             case LoopType::Loop:  return "loop";
             case LoopType::Stop:  return "stop";
             case LoopType::Reset: return "reset";
+            default:              return "loop";
             }
-            return "loop";
         }(options.loop);
 
         auto const recordedAtlas = options.absolutePaths
