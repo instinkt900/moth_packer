@@ -306,7 +306,7 @@ int main(int argc, char* argv[]) {
     CLI11_PARSE(app, argc, argv);
 
     if (verboseMode) {
-        spdlog::set_level(spdlog::level::trace);
+        spdlog::set_level(spdlog::level::info);
     } else if (silentMode) {
         spdlog::set_level(spdlog::level::err);
     } else {
@@ -323,7 +323,8 @@ int main(int argc, char* argv[]) {
     case Mode::Pack:     return RunPack(args);
     case Mode::Unpack:   return RunUnpack(args);
     case Mode::Flipbook: return RunFlipbook(args);
+    default:
+        spdlog::error("Unhandled mode");
+        return 1;
     }
-
-    return 0;
 }
