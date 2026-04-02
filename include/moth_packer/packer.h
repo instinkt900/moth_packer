@@ -164,6 +164,11 @@ namespace moth_packer {
         int jpegQuality = 90;                       ///< JPEG encode quality (1–100). Only used when format is AtlasFormat::JPEG.
         int fps = 12;                               ///< Frames per second for the default clip.
         LoopType loop = LoopType::Loop;             ///< Loop behaviour for the default clip.
+        int frameWidth = 0;                         ///< Fixed frame width in pixels. 0 = derive from the largest input image.
+        int frameHeight = 0;                        ///< Fixed frame height in pixels. 0 = derive from the largest input image.
+        bool strict = false;                        ///< If true, oversized frames and atlas size violations cause errors instead of warnings.
+        int maxAtlasWidth = 0;                      ///< Maximum atlas width in pixels. 0 = no limit.
+        int maxAtlasHeight = 0;                     ///< Maximum atlas height in pixels. 0 = no limit.
     };
 
     /// @brief Pack images into a uniform-grid flipbook sheet and write a JSON descriptor.

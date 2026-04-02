@@ -532,10 +532,6 @@ namespace moth_packer {
             spdlog::error("PackOptions::filename must not be empty");
             return false;
         }
-        if (!std::filesystem::exists(options.outputPath)) {
-            spdlog::error("Output path does not exist: {}", options.outputPath.string());
-            return false;
-        }
         if (options.padding < 0) {
             spdlog::error("PackOptions::padding must be non-negative (got {})", options.padding);
             return false;
@@ -562,6 +558,10 @@ namespace moth_packer {
         if (options.maxWidth > kMaxAtlasDim || options.maxHeight > kMaxAtlasDim) {
             spdlog::error("PackOptions::maxWidth/maxHeight must not exceed {}", kMaxAtlasDim);
             return false;
+        }
+
+        if (!options.dryRun) {
+            std::filesystem::create_directories(options.outputPath);
         }
 
         std::vector<stbrp_rect> stbRects;
@@ -663,14 +663,14 @@ namespace moth_packer {
             spdlog::error("Sprite sheet does not exist: {}", sheetPath.string());
             return false;
         }
-        if (!std::filesystem::exists(options.outputPath)) {
-            spdlog::error("Output path does not exist: {}", options.outputPath.string());
-            return false;
-        }
         if (options.format == AtlasFormat::JPEG &&
             (options.jpegQuality < 1 || options.jpegQuality > 100)) {
             spdlog::error("UnpackOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
             return false;
+        }
+
+        if (!options.dryRun) {
+            std::filesystem::create_directories(options.outputPath);
         }
 
         constexpr int kChannels = 4;
@@ -832,12 +832,14 @@ namespace moth_packer {
             return a.path.filename() < b.path.filename();
         });
 
-        // Determine frame dimensions from the largest input image.
-        int frameW = 0;
-        int frameH = 0;
-        for (auto const& img : images) {
-            frameW = std::max(frameW, img.dimensions.x);
-            frameH = std::max(frameH, img.dimensions.y);
+        // Determine frame dimensions: use explicit size if provided, otherwise derive from largest input.
+        int frameW = options.frameWidth;
+        int frameH = options.frameHeight;
+        if (frameW <= 0 || frameH <= 0) {
+            for (auto const& img : images) {
+                frameW = std::max(frameW, img.dimensions.x);
+                frameH = std::max(frameH, img.dimensions.y);
+            }
         }
 
         int const frameCount = static_cast<int>(images.size());
@@ -845,6 +847,17 @@ namespace moth_packer {
         int const rows = (frameCount + cols - 1) / cols;
         int const atlasW = cols * frameW;
         int const atlasH = rows * frameH;
+
+        if ((options.maxAtlasWidth > 0 && atlasW > options.maxAtlasWidth) ||
+            (options.maxAtlasHeight > 0 && atlasH > options.maxAtlasHeight)) {
+            if (options.strict) {
+                spdlog::error("Flipbook atlas ({}x{}) exceeds max dimensions ({}x{})",
+                              atlasW, atlasH, options.maxAtlasWidth, options.maxAtlasHeight);
+                return false;
+            }
+            spdlog::warn("Flipbook atlas ({}x{}) exceeds max dimensions ({}x{})",
+                         atlasW, atlasH, options.maxAtlasWidth, options.maxAtlasHeight);
+        }
 
         // Check for existing outputs.
         std::string const ext = FormatExtension(options.format);
@@ -864,6 +877,26 @@ namespace moth_packer {
         int const kChannels = 4;
         std::vector<uint8_t> atlasPixels(static_cast<size_t>(atlasW) * atlasH * kChannels, 0);
 
+        if (options.strict) {
+            bool anyOversized = false;
+            for (int i = 0; i < frameCount; ++i) {
+                auto const& img = images[i];
+                if (img.dimensions.x > frameW || img.dimensions.y > frameH) {
+                    spdlog::error("Frame {} ({}x{}) exceeds frame size {}x{}: {}",
+                                  i, img.dimensions.x, img.dimensions.y, frameW, frameH,
+                                  img.path.string());
+                    anyOversized = true;
+                }
+            }
+            if (anyOversized) {
+                return false;
+            }
+        }
+
+        if (!options.dryRun) {
+            std::filesystem::create_directories(options.outputPath);
+        }
+
         for (int i = 0; i < frameCount; ++i) {
             auto const& imgPath = images[i].path;
             int srcW = 0;
@@ -875,19 +908,32 @@ namespace moth_packer {
                 return false;
             }
 
-            int const col    = i % cols;
-            int const row    = i / cols;
-            int const cellX  = col * frameW;
-            int const cellY  = row * frameH;
-            // Centre the image within its cell.
-            int const dstX   = cellX + ((frameW - srcW) / 2);
-            int const dstY   = cellY + ((frameH - srcH) / 2);
+            if (srcW > frameW || srcH > frameH) {
+                spdlog::warn("Frame {} ({}x{}) exceeds frame size {}x{}, cropping: {}",
+                             i, srcW, srcH, frameW, frameH, imgPath.string());
+            }
 
-            for (int y = 0; y < srcH; ++y) {
-                auto const srcOff = static_cast<size_t>(y) * srcW * kChannels;
-                auto const dstOff = (static_cast<size_t>(dstY + y) * atlasW + dstX) * kChannels;
+            int const col   = i % cols;
+            int const row   = i / cols;
+            int const cellX = col * frameW;
+            int const cellY = row * frameH;
+            // Centre the image within its cell, then clamp to the cell boundary for cropping.
+            int const dstX  = cellX + ((frameW - srcW) / 2);
+            int const dstY  = cellY + ((frameH - srcH) / 2);
+
+            int const blitX0 = std::max(dstX, cellX);
+            int const blitY0 = std::max(dstY, cellY);
+            int const blitX1 = std::min(dstX + srcW, cellX + frameW);
+            int const blitY1 = std::min(dstY + srcH, cellY + frameH);
+
+            for (int y = blitY0; y < blitY1; ++y) {
+                int const srcY   = y - dstY;
+                int const srcX   = blitX0 - dstX;
+                int const blitW  = blitX1 - blitX0;
+                auto const srcOff = (static_cast<size_t>(srcY) * srcW + srcX) * kChannels;
+                auto const dstOff = (static_cast<size_t>(y) * atlasW + blitX0) * kChannels;
                 std::memcpy(atlasPixels.data() + dstOff, src + srcOff,
-                            static_cast<size_t>(srcW) * kChannels);
+                            static_cast<size_t>(blitW) * kChannels);
             }
 
             stbi_image_free(src);

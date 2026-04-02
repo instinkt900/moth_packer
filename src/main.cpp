@@ -54,6 +54,9 @@ struct Args {
 
     int fps = 12;
     moth_packer::LoopType loop = moth_packer::LoopType::Loop;
+    std::pair<int, int> frameSize{ 0, 0 };
+    bool strict = false;
+    bool maxDimSupplied = false;
 };
 
 static bool CollectImages(Args const& args, std::vector<moth_packer::ImageDetails>& images) {
@@ -109,6 +112,13 @@ int RunFlipbook(Args const& args) {
     opts.jpegQuality   = args.jpegQuality;
     opts.fps           = args.fps;
     opts.loop          = args.loop;
+    opts.frameWidth    = args.frameSize.first;
+    opts.frameHeight   = args.frameSize.second;
+    opts.strict        = args.strict;
+    if (args.maxDimSupplied) {
+        opts.maxAtlasWidth  = args.maxDimensions.first;
+        opts.maxAtlasHeight = args.maxDimensions.second;
+    }
     return moth_packer::Flipbook(std::move(images), opts) ? 0 : 1;
 }
 
@@ -188,30 +198,31 @@ int main(int argc, char* argv[]) {
     app.add_option("-o,--out", args.outputDir, "Path to directory where output files will be written")
         ->default_val(".");
 
-    app.add_option("-n,--min",
+    app.add_option("--min-dim",
                    args.minDimensions,
-                   fmt::format("Min atlas dimensions w,h (default: {},{})",
+                   fmt::format("Min atlas dimensions WxH (default: {}x{})",
                                args.minDimensions.first,
                                args.minDimensions.second))
-        ->delimiter(',');
+        ->delimiter('x');
 
-    app.add_option("-m,--max",
-                   args.maxDimensions,
-                   fmt::format("Max atlas dimensions w,h (default: {},{})",
-                               args.maxDimensions.first,
-                               args.maxDimensions.second))
-        ->delimiter(',');
+    auto* optionMaxDim =
+        app.add_option("--max-dim",
+                       args.maxDimensions,
+                       fmt::format("Max atlas dimensions WxH (default: {}x{})",
+                                   args.maxDimensions.first,
+                                   args.maxDimensions.second))
+            ->delimiter('x');
 
     app.add_option("-p,--padding", args.padding, "Padding around images.")->default_val(0);
 
-    app.add_option("-t,--padding-type", args.paddingType, "Padding type")
+    app.add_option("--padding-type", args.paddingType, "Padding type")
         ->transform(CLI::CheckedTransformer(
             std::map<std::string, moth_packer::PaddingType>{ { "color", moth_packer::PaddingType::Color },
                                                              { "extend", moth_packer::PaddingType::Extend },
                                                              { "mirror", moth_packer::PaddingType::Mirror },
                                                              { "wrap", moth_packer::PaddingType::Wrap } }));
 
-    app.add_option("-c,--padding-color", args.paddingColor, "Padding color as RRGGBBAA hex")
+    app.add_option("--padding-color", args.paddingColor, "Padding color as RRGGBBAA hex")
         ->transform([](std::string const& val) -> std::string {
             if (val.size() != 8 || val.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
                 throw CLI::ValidationError("-c,--padding-color", "must be exactly 8 hex digits");
@@ -249,6 +260,15 @@ int main(int argc, char* argv[]) {
     app.add_option("--fps", args.fps, "Frames per second for the default flipbook clip (default: 12, flipbook mode only)")
         ->check(CLI::Range(1, 1000));
 
+    app.add_option("--frame-size", args.frameSize,
+                   "Fixed frame size as WxH (flipbook mode only). Defaults to the largest input image dimensions.")
+        ->delimiter('x')
+        ->check(CLI::PositiveNumber);
+
+    app.add_flag("--strict", args.strict,
+                 "Treat oversized frames as errors instead of cropping them (flipbook mode only).")
+        ->default_val(false);
+
     app.add_option("--loop", args.loop, "Loop behaviour for the default flipbook clip (default: loop, flipbook mode only)")
         ->transform(CLI::CheckedTransformer(
             std::map<std::string, moth_packer::LoopType>{ { "loop", moth_packer::LoopType::Loop },
@@ -261,6 +281,8 @@ int main(int argc, char* argv[]) {
     }
 
     CLI11_PARSE(app, argc, argv);
+
+    args.maxDimSupplied = optionMaxDim->count() != 0;
 
     if (verboseMode) {
         spdlog::set_level(spdlog::level::trace);
@@ -275,8 +297,6 @@ int main(int argc, char* argv[]) {
     else if (optionLayout->count() != 0) { args.inputSource = InputSource::Layout; }
     else if (optionLayoutDir->count() != 0) { args.inputSource = InputSource::LayoutDir; }
     else if (optionGlob->count() != 0) { args.inputSource = InputSource::Glob; }
-
-    std::filesystem::create_directories(args.outputDir);
 
     switch (args.mode) {
     case Mode::Pack:     return RunPack(args);
