@@ -145,4 +145,37 @@ namespace moth_packer {
     ///         Returns false on load failure, invalid options, or any write error.
     bool Unpack(std::filesystem::path const& sheetPath, UnpackOptions const& options);
 
+    /// Loop behaviour for a flipbook clip.
+    enum class LoopType {
+        Loop,   ///< Jump back to Start and keep playing indefinitely.
+        Stop,   ///< Freeze on the End frame and fire EventFlipbookStopped.
+        Reset,  ///< Rewind to Start, freeze, and fire EventFlipbookStopped.
+    };
+
+    /// Options controlling flipbook sheet generation.
+    struct FlipbookOptions {
+        std::filesystem::path outputPath;           ///< Directory where the atlas and JSON descriptor are written.
+        std::string filename;                       ///< Base name for output files (no extension).
+        bool forceOverwrite = false;                ///< Overwrite existing output files without error.
+        bool dryRun = false;                        ///< Run the full pipeline but do not write any files.
+        bool prettyJson = false;                    ///< Pretty-print the JSON descriptor with 4-space indentation.
+        bool absolutePaths = false;                 ///< Write absolute paths in the JSON descriptor instead of paths relative to outputPath.
+        AtlasFormat format = AtlasFormat::PNG;      ///< Output image format for the atlas.
+        int jpegQuality = 90;                       ///< JPEG encode quality (1–100). Only used when format is AtlasFormat::JPEG.
+        int fps = 12;                               ///< Frames per second for the default clip.
+        LoopType loop = LoopType::Loop;             ///< Loop behaviour for the default clip.
+    };
+
+    /// @brief Pack images into a uniform-grid flipbook sheet and write a JSON descriptor.
+    ///
+    /// Images are sorted alphabetically by filename and placed in a roughly-square grid,
+    /// each frame centred in a cell of the maximum input image dimensions. A single default
+    /// clip covering all frames is written to the descriptor.
+    ///
+    /// @param images  Images to pack. Passed by value; the caller's list is unmodified.
+    /// @param options Flipbook configuration.
+    /// @return True when packing completes and (when not a dry run) output files are written
+    ///         successfully. Returns false on fatal errors.
+    bool Flipbook(std::vector<ImageDetails> images, FlipbookOptions const& options);
+
 } // namespace moth_packer

@@ -12,10 +12,20 @@ enum class Mode {
     Flipbook,
 };
 
+enum class InputSource {
+    None,
+    File,
+    Dir,
+    Layout,
+    LayoutDir,
+    Glob,
+};
+
 struct Args {
     std::string path;
     Mode mode = Mode::Pack;
 
+    InputSource inputSource = InputSource::None;
     std::filesystem::path inputTxt;
     std::filesystem::path inputDir;
     std::filesystem::path inputLayout;
@@ -41,78 +51,99 @@ struct Args {
     int jpegQuality = 90;
 
     bool dryRun = false;
+
+    int fps = 12;
+    moth_packer::LoopType loop = moth_packer::LoopType::Loop;
 };
+
+static bool CollectImages(Args const& args, std::vector<moth_packer::ImageDetails>& images) {
+    switch (args.inputSource) {
+    case InputSource::File:      return moth_packer::CollectImagesFromFile(args.inputTxt, images);
+    case InputSource::Dir:       return moth_packer::CollectImagesFromDir(args.inputDir, args.recursiveInput, images);
+    case InputSource::Layout:    return moth_packer::CollectImagesFromLayout(args.inputLayout, images);
+    case InputSource::LayoutDir: return moth_packer::CollectImagesFromLayoutsDir(args.inputLayoutDir, args.recursiveInput, images);
+    case InputSource::Glob:      return moth_packer::CollectImagesFromGlob(args.inputGlob, images);
+    case InputSource::None:      return false;
+    }
+    return false;
+}
 
 int RunUnpack(Args const& args) {
     if (args.path.empty()) {
         spdlog::error("sheet path is required for unpack mode");
         return 1;
     }
-    moth_packer::UnpackOptions unpackOptions;
-    unpackOptions.outputPath     = args.outputDir;
-    unpackOptions.alphaThreshold = static_cast<uint8_t>(args.alphaThreshold);
-    unpackOptions.forceOverwrite = args.forceOverwrite;
-    unpackOptions.dryRun         = args.dryRun;
-    unpackOptions.format         = args.atlasFormat;
-    unpackOptions.jpegQuality    = args.jpegQuality;
-    return moth_packer::Unpack(args.path, unpackOptions) ? 0 : 1;
+    moth_packer::UnpackOptions opts;
+    opts.outputPath     = args.outputDir;
+    opts.alphaThreshold = static_cast<uint8_t>(args.alphaThreshold);
+    opts.forceOverwrite = args.forceOverwrite;
+    opts.dryRun         = args.dryRun;
+    opts.format         = args.atlasFormat;
+    opts.jpegQuality    = args.jpegQuality;
+    return moth_packer::Unpack(args.path, opts) ? 0 : 1;
 }
 
-int RunFlipbook(Args const& /*args*/) {
-    spdlog::error("flipbook mode is not yet implemented");
-    return 1;
-}
-
-int RunPack(Args const& args, CLI::Option_group* group,
-            CLI::Option* optionFile, CLI::Option* optionDir,
-            CLI::Option* optionLayout, CLI::Option* optionLayoutDir,
-            CLI::Option* optionGlob) {
+int RunFlipbook(Args const& args) {
     if (args.path.empty()) {
-        spdlog::error("output name is required for pack mode");
+        spdlog::error("output name is required for flipbook mode");
         return 1;
     }
-
-    if (group->count() == 0) {
-        spdlog::error("an input source is required for pack mode");
+    if (args.inputSource == InputSource::None) {
+        spdlog::error("an input source is required for flipbook mode");
         return 1;
     }
-
     std::vector<moth_packer::ImageDetails> images;
-    if (optionFile->count() != 0) {
-        moth_packer::CollectImagesFromFile(args.inputTxt, images);
-    } else if (optionDir->count() != 0) {
-        moth_packer::CollectImagesFromDir(args.inputDir, args.recursiveInput, images);
-    } else if (optionLayout->count() != 0) {
-        moth_packer::CollectImagesFromLayout(args.inputLayout, images);
-    } else if (optionLayoutDir->count() != 0) {
-        moth_packer::CollectImagesFromLayoutsDir(args.inputLayoutDir, args.recursiveInput, images);
-    } else if (optionGlob->count() != 0) {
-        moth_packer::CollectImagesFromGlob(args.inputGlob, images);
-    }
-
+    CollectImages(args, images);
     if (images.empty()) {
         spdlog::error("No images found!");
         return 1;
     }
+    moth_packer::FlipbookOptions opts;
+    opts.outputPath    = args.outputDir;
+    opts.filename      = args.path;
+    opts.forceOverwrite = args.forceOverwrite;
+    opts.dryRun        = args.dryRun;
+    opts.prettyJson    = args.prettyJson;
+    opts.absolutePaths = args.absolutePaths;
+    opts.format        = args.atlasFormat;
+    opts.jpegQuality   = args.jpegQuality;
+    opts.fps           = args.fps;
+    opts.loop          = args.loop;
+    return moth_packer::Flipbook(std::move(images), opts) ? 0 : 1;
+}
 
-    moth_packer::PackOptions packOptions;
-    packOptions.outputPath    = args.outputDir;
-    packOptions.filename      = args.path;
-    packOptions.forceOverwrite = args.forceOverwrite;
-    packOptions.dryRun        = args.dryRun;
-    packOptions.minWidth      = args.minDimensions.first;
-    packOptions.minHeight     = args.minDimensions.second;
-    packOptions.maxWidth      = args.maxDimensions.first;
-    packOptions.maxHeight     = args.maxDimensions.second;
-    packOptions.padding       = args.padding;
-    packOptions.paddingType   = args.paddingType;
-    packOptions.paddingColor  = args.paddingColor;
-    packOptions.prettyJson    = args.prettyJson;
-    packOptions.absolutePaths = args.absolutePaths;
-    packOptions.format        = args.atlasFormat;
-    packOptions.jpegQuality   = args.jpegQuality;
-
-    return moth_packer::Pack(images, packOptions) ? 0 : 1;
+int RunPack(Args const& args) {
+    if (args.path.empty()) {
+        spdlog::error("output name is required for pack mode");
+        return 1;
+    }
+    if (args.inputSource == InputSource::None) {
+        spdlog::error("an input source is required for pack mode");
+        return 1;
+    }
+    std::vector<moth_packer::ImageDetails> images;
+    CollectImages(args, images);
+    if (images.empty()) {
+        spdlog::error("No images found!");
+        return 1;
+    }
+    moth_packer::PackOptions opts;
+    opts.outputPath    = args.outputDir;
+    opts.filename      = args.path;
+    opts.forceOverwrite = args.forceOverwrite;
+    opts.dryRun        = args.dryRun;
+    opts.minWidth      = args.minDimensions.first;
+    opts.minHeight     = args.minDimensions.second;
+    opts.maxWidth      = args.maxDimensions.first;
+    opts.maxHeight     = args.maxDimensions.second;
+    opts.padding       = args.padding;
+    opts.paddingType   = args.paddingType;
+    opts.paddingColor  = args.paddingColor;
+    opts.prettyJson    = args.prettyJson;
+    opts.absolutePaths = args.absolutePaths;
+    opts.format        = args.atlasFormat;
+    opts.jpegQuality   = args.jpegQuality;
+    return moth_packer::Pack(std::move(images), opts) ? 0 : 1;
 }
 
 int main(int argc, char* argv[]) {
@@ -215,6 +246,15 @@ int main(int argc, char* argv[]) {
     app.add_option("--jpeg-quality", args.jpegQuality, "JPEG encode quality 1-100 (default: 90, only used with --format jpeg)")
         ->check(CLI::Range(1, 100));
 
+    app.add_option("--fps", args.fps, "Frames per second for the default flipbook clip (default: 12, flipbook mode only)")
+        ->check(CLI::Range(1, 1000));
+
+    app.add_option("--loop", args.loop, "Loop behaviour for the default flipbook clip (default: loop, flipbook mode only)")
+        ->transform(CLI::CheckedTransformer(
+            std::map<std::string, moth_packer::LoopType>{ { "loop", moth_packer::LoopType::Loop },
+                                                          { "stop", moth_packer::LoopType::Stop },
+                                                          { "reset", moth_packer::LoopType::Reset } }));
+
     if (argc == 1) {
         std::cout << app.help();
         return 0;
@@ -230,15 +270,18 @@ int main(int argc, char* argv[]) {
         spdlog::set_level(spdlog::level::warn);
     }
 
+    if (optionFile->count() != 0)      { args.inputSource = InputSource::File; }
+    else if (optionDir->count() != 0)  { args.inputSource = InputSource::Dir; }
+    else if (optionLayout->count() != 0) { args.inputSource = InputSource::Layout; }
+    else if (optionLayoutDir->count() != 0) { args.inputSource = InputSource::LayoutDir; }
+    else if (optionGlob->count() != 0) { args.inputSource = InputSource::Glob; }
+
     std::filesystem::create_directories(args.outputDir);
 
     switch (args.mode) {
-    case Mode::Unpack:
-        return RunUnpack(args);
-    case Mode::Flipbook:
-        return RunFlipbook(args);
-    case Mode::Pack:
-        return RunPack(args, group, optionFile, optionDir, optionLayout, optionLayoutDir, optionGlob);
+    case Mode::Pack:     return RunPack(args);
+    case Mode::Unpack:   return RunUnpack(args);
+    case Mode::Flipbook: return RunFlipbook(args);
     }
 
     return 0;

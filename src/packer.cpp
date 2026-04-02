@@ -816,4 +816,151 @@ namespace moth_packer {
         stbi_image_free(pixels);
         return success;
     }
+
+    bool Flipbook(std::vector<ImageDetails> images, FlipbookOptions const& options) {
+        if (images.empty()) {
+            spdlog::error("No images to pack into flipbook");
+            return false;
+        }
+        if (options.outputPath.empty() || options.filename.empty()) {
+            spdlog::error("outputPath and filename are required for flipbook output");
+            return false;
+        }
+
+        // Sort frames alphabetically by filename so artists can name them 001.png, 002.png, etc.
+        std::sort(images.begin(), images.end(), [](ImageDetails const& a, ImageDetails const& b) {
+            return a.path.filename() < b.path.filename();
+        });
+
+        // Determine frame dimensions from the largest input image.
+        int frameW = 0;
+        int frameH = 0;
+        for (auto const& img : images) {
+            frameW = std::max(frameW, img.dimensions.x);
+            frameH = std::max(frameH, img.dimensions.y);
+        }
+
+        int const frameCount = static_cast<int>(images.size());
+        int const cols = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(frameCount)))));
+        int const rows = (frameCount + cols - 1) / cols;
+        int const atlasW = cols * frameW;
+        int const atlasH = rows * frameH;
+
+        // Check for existing outputs.
+        std::string const ext = FormatExtension(options.format);
+        auto const atlasPath = options.outputPath / (options.filename + ext);
+        auto const jsonPath  = options.outputPath / (options.filename + ".flipbook.json");
+        if (!options.forceOverwrite) {
+            if (std::filesystem::exists(atlasPath)) {
+                spdlog::error("Output already exists (use --force to overwrite): {}", atlasPath.string());
+                return false;
+            }
+            if (std::filesystem::exists(jsonPath)) {
+                spdlog::error("Output already exists (use --force to overwrite): {}", jsonPath.string());
+                return false;
+            }
+        }
+
+        int const kChannels = 4;
+        std::vector<uint8_t> atlasPixels(static_cast<size_t>(atlasW) * atlasH * kChannels, 0);
+
+        for (int i = 0; i < frameCount; ++i) {
+            auto const& imgPath = images[i].path;
+            int srcW = 0;
+            int srcH = 0;
+            int srcCh = 0;
+            stbi_uc* src = stbi_load(imgPath.string().c_str(), &srcW, &srcH, &srcCh, kChannels);
+            if (src == nullptr) {
+                spdlog::error("Failed to load frame image: {}", imgPath.string());
+                return false;
+            }
+
+            int const col    = i % cols;
+            int const row    = i / cols;
+            int const cellX  = col * frameW;
+            int const cellY  = row * frameH;
+            // Centre the image within its cell.
+            int const dstX   = cellX + ((frameW - srcW) / 2);
+            int const dstY   = cellY + ((frameH - srcH) / 2);
+
+            for (int y = 0; y < srcH; ++y) {
+                auto const srcOff = static_cast<size_t>(y) * srcW * kChannels;
+                auto const dstOff = (static_cast<size_t>(dstY + y) * atlasW + dstX) * kChannels;
+                std::memcpy(atlasPixels.data() + dstOff, src + srcOff,
+                            static_cast<size_t>(srcW) * kChannels);
+            }
+
+            stbi_image_free(src);
+            spdlog::info("Frame {}: {}", i, imgPath.string());
+        }
+
+        if (!options.dryRun) {
+            auto const pathStr = atlasPath.string();
+            auto const* pathCStr = pathStr.c_str();
+            int writeResult = 0;
+            switch (options.format) {
+            case AtlasFormat::PNG:
+                writeResult = stbi_write_png(pathCStr, atlasW, atlasH, kChannels,
+                                             atlasPixels.data(), atlasW * kChannels);
+                break;
+            case AtlasFormat::BMP:
+                writeResult = stbi_write_bmp(pathCStr, atlasW, atlasH, kChannels, atlasPixels.data());
+                break;
+            case AtlasFormat::TGA:
+                writeResult = stbi_write_tga(pathCStr, atlasW, atlasH, kChannels, atlasPixels.data());
+                break;
+            case AtlasFormat::JPEG:
+                writeResult = stbi_write_jpg(pathCStr, atlasW, atlasH, kChannels,
+                                             atlasPixels.data(), options.jpegQuality);
+                break;
+            }
+            if (writeResult == 0) {
+                spdlog::error("Failed to write flipbook atlas: {}", atlasPath.string());
+                return false;
+            }
+        }
+
+        auto const loopStr = [](LoopType t) -> std::string {
+            switch (t) {
+            case LoopType::Loop:  return "loop";
+            case LoopType::Stop:  return "stop";
+            case LoopType::Reset: return "reset";
+            }
+            return "loop";
+        }(options.loop);
+
+        auto const recordedAtlas = options.absolutePaths
+            ? std::filesystem::absolute(atlasPath).string()
+            : std::filesystem::relative(atlasPath, options.outputPath).string();
+
+        nlohmann::json j;
+        j["image"]       = recordedAtlas;
+        j["frame_width"]  = frameW;
+        j["frame_height"] = frameH;
+        j["frame_cols"]   = cols;
+        j["frame_rows"]   = rows;
+        j["max_frames"]   = frameCount;
+        j["clips"]        = nlohmann::json::array();
+
+        nlohmann::json clip;
+        clip["name"]  = "default";
+        clip["start"] = 0;
+        clip["end"]   = frameCount - 1;
+        clip["fps"]   = options.fps;
+        clip["loop"]  = loopStr;
+        j["clips"].push_back(clip);
+
+        if (!options.dryRun) {
+            std::ofstream out(jsonPath);
+            if (!out.is_open()) {
+                spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                return false;
+            }
+            out << (options.prettyJson ? j.dump(4) : j.dump());
+        }
+
+        spdlog::info("Wrote flipbook: {} ({} frames, {}x{} grid, {}x{} px)",
+                     jsonPath.string(), frameCount, cols, rows, atlasW, atlasH);
+        return true;
+    }
 } // namespace moth_packer
