@@ -22,7 +22,7 @@ namespace moth_packer {
 
     /// Strategy used to fill the padding border around each packed image.
     enum class PaddingType {
-        Color,  ///< Fill with a solid colour (see PackOptions::paddingColor).
+        Color,  ///< Fill with a solid color (see PackOptions::paddingColor).
         Extend, ///< Repeat the nearest edge pixel outward.
         Mirror, ///< Reflect pixels across each edge.
         Wrap,   ///< Tile pixels from the opposite edge.
@@ -78,7 +78,7 @@ namespace moth_packer {
         int maxHeight = 4096;                       ///< Maximum atlas height (rounded up to the next power of two).
         int padding = 0;                            ///< Pixels of padding added around each image on all sides.
         PaddingType paddingType = PaddingType::Color; ///< How the padding border pixels are filled (Color is a no-op; the atlas background handles it).
-        uint32_t paddingColor = 0;                  ///< Atlas background colour as RRGGBBAA. Applied to the entire atlas before compositing, so it fills padding regions and any unpacked areas.
+        uint32_t paddingColor = 0;                  ///< Atlas background color as RRGGBBAA. Applied to the entire atlas before compositing, so it fills padding regions and any unpacked areas.
         bool prettyJson = false;                    ///< Pretty-print the JSON descriptor with 4-space indentation.
         bool absolutePaths = false;                 ///< Write absolute paths in the JSON descriptor instead of paths relative to outputPath.
         AtlasFormat format = AtlasFormat::PNG;      ///< Output image format for atlas files.
@@ -144,5 +144,43 @@ namespace moth_packer {
     /// @return True if all detected sprites were written successfully (or dryRun is true).
     ///         Returns false on load failure, invalid options, or any write error.
     bool Unpack(std::filesystem::path const& sheetPath, UnpackOptions const& options);
+
+    /// Loop behavior for a flipbook clip.
+    enum class LoopType {
+        Loop,   ///< Jump back to Start and keep playing indefinitely.
+        Stop,   ///< Freeze on the End frame and fire EventFlipbookStopped.
+        Reset,  ///< Rewind to Start, freeze, and fire EventFlipbookStopped.
+    };
+
+    /// Options controlling flipbook sheet generation.
+    struct FlipbookOptions {
+        std::filesystem::path outputPath;           ///< Directory where the atlas and JSON descriptor are written.
+        std::string filename;                       ///< Base name for output files (no extension).
+        bool forceOverwrite = false;                ///< Overwrite existing output files without error.
+        bool dryRun = false;                        ///< Run the full pipeline but do not write any files.
+        bool prettyJson = false;                    ///< Pretty-print the JSON descriptor with 4-space indentation.
+        bool absolutePaths = false;                 ///< Write absolute paths in the JSON descriptor instead of paths relative to outputPath.
+        AtlasFormat format = AtlasFormat::PNG;      ///< Output image format for the atlas.
+        int jpegQuality = 90;                       ///< JPEG encode quality (1–100). Only used when format is AtlasFormat::JPEG.
+        int fps = 12;                               ///< Frames per second for the default clip.
+        LoopType loop = LoopType::Loop;             ///< Loop behavior for the default clip.
+        int frameWidth = 0;                         ///< Fixed frame width in pixels. 0 = derive from the largest input image.
+        int frameHeight = 0;                        ///< Fixed frame height in pixels. 0 = derive from the largest input image.
+        bool strict = false;                        ///< If true, oversized frames and atlas size violations cause errors instead of warnings.
+        int maxAtlasWidth = 0;                      ///< Maximum atlas width in pixels. 0 = no limit.
+        int maxAtlasHeight = 0;                     ///< Maximum atlas height in pixels. 0 = no limit.
+    };
+
+    /// @brief Pack images into a uniform-grid flipbook sheet and write a JSON descriptor.
+    ///
+    /// Images are sorted alphabetically by filename and placed in a roughly-square grid,
+    /// each frame centred in a cell of the maximum input image dimensions. A single default
+    /// clip covering all frames is written to the descriptor.
+    ///
+    /// @param images  Images to pack. Passed by value; the caller's list is unmodified.
+    /// @param options Flipbook configuration.
+    /// @return True when packing completes and (when not a dry run) output files are written
+    ///         successfully. Returns false on fatal errors.
+    bool Flipbook(std::vector<ImageDetails> images, FlipbookOptions const& options);
 
 } // namespace moth_packer

@@ -24,10 +24,13 @@ TEST_CASE("Pack returns false for empty image list", "[pack]") {
     CHECK_FALSE(Pack({}, MakeTestPackOptions(out.path)));
 }
 
-TEST_CASE("Pack returns false when output path does not exist", "[pack]") {
+TEST_CASE("Pack creates output directory when it does not exist", "[pack]") {
     TempDir src;
+    TempDir out;
+    auto const nestedOut = out.path / "sub" / "dir";
     auto images = { MakeTestImage(src.path, "a.png", 16, 16) };
-    CHECK_FALSE(Pack(images, MakeTestPackOptions("/nonexistent/path")));
+    CHECK(Pack(images, MakeTestPackOptions(nestedOut)));
+    CHECK(std::filesystem::exists(nestedOut));
 }
 
 TEST_CASE("Pack returns false when output JSON already exists and forceOverwrite is false", "[pack]") {

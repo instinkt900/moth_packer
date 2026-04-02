@@ -1,6 +1,4 @@
 # moth_packer TODO
 
-## Validation
-
-- [ ] Warn when an image appears in multiple input layouts (currently silently deduplicated)
-- [ ] `--max-images <N>` — cap the number of images per atlas
+- Consider supporting an input metadata file that maps clip names to ordered lists of image paths, allowing multiple named clips to be packed into a single atlas without relying on filename conventions.
+- `--max-images <N>` — cap the number of images per atlas

@@ -41,7 +41,7 @@ struct TempDir {
     TempDir& operator=(TempDir const&) = delete;
 };
 
-// Write a solid-colour RGBA PNG of the given dimensions and return an ImageDetails for it
+// Write a solid-color RGBA PNG of the given dimensions and return an ImageDetails for it
 inline moth_packer::ImageDetails MakeTestImage(std::filesystem::path const& dir, std::string const& name, int width, int height) {
     if (width <= 0 || height <= 0) {
         throw std::invalid_argument("MakeTestImage: width and height must be positive");

@@ -187,7 +187,7 @@ namespace moth_packer {
             int const atlasChannels = 4;
             std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels);
 
-            // Pre-fill the entire atlas with paddingColor. This sets the background colour
+            // Pre-fill the entire atlas with paddingColor. This sets the background color
             // for the atlas (visible in padding regions and any unpacked areas) and makes
             // the PaddingType::Color border fill a no-op.
             uint8_t const bg_r = static_cast<uint8_t>((paddingColor >> 24) & 0xFF);
@@ -532,10 +532,6 @@ namespace moth_packer {
             spdlog::error("PackOptions::filename must not be empty");
             return false;
         }
-        if (!std::filesystem::exists(options.outputPath)) {
-            spdlog::error("Output path does not exist: {}", options.outputPath.string());
-            return false;
-        }
         if (options.padding < 0) {
             spdlog::error("PackOptions::padding must be non-negative (got {})", options.padding);
             return false;
@@ -562,6 +558,16 @@ namespace moth_packer {
         if (options.maxWidth > kMaxAtlasDim || options.maxHeight > kMaxAtlasDim) {
             spdlog::error("PackOptions::maxWidth/maxHeight must not exceed {}", kMaxAtlasDim);
             return false;
+        }
+
+        if (!options.dryRun) {
+            try {
+                std::filesystem::create_directories(options.outputPath);
+            } catch (std::filesystem::filesystem_error const& e) {
+                spdlog::error("Failed to create output directory '{}': {}",
+                              options.outputPath.string(), e.what());
+                return false;
+            }
         }
 
         std::vector<stbrp_rect> stbRects;
@@ -663,14 +669,20 @@ namespace moth_packer {
             spdlog::error("Sprite sheet does not exist: {}", sheetPath.string());
             return false;
         }
-        if (!std::filesystem::exists(options.outputPath)) {
-            spdlog::error("Output path does not exist: {}", options.outputPath.string());
-            return false;
-        }
         if (options.format == AtlasFormat::JPEG &&
             (options.jpegQuality < 1 || options.jpegQuality > 100)) {
             spdlog::error("UnpackOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
             return false;
+        }
+
+        if (!options.dryRun) {
+            try {
+                std::filesystem::create_directories(options.outputPath);
+            } catch (std::filesystem::filesystem_error const& e) {
+                spdlog::error("Failed to create output directory '{}': {}",
+                              options.outputPath.string(), e.what());
+                return false;
+            }
         }
 
         constexpr int kChannels = 4;
@@ -698,7 +710,7 @@ namespace moth_packer {
         struct SpriteRect { int x, y, w, h; };
         std::vector<SpriteRect> sprites;
 
-        // All 8 neighbours: cardinal (N/S/E/W) + diagonal.
+        // All 8 neighbors: cardinal (N/S/E/W) + diagonal.
         static constexpr std::array<std::pair<int, int>, 8> kNeighbors{{
             {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
         }};
@@ -815,5 +827,251 @@ namespace moth_packer {
 
         stbi_image_free(pixels);
         return success;
+    }
+
+    bool Flipbook(std::vector<ImageDetails> images, FlipbookOptions const& options) {
+        if (images.empty()) {
+            spdlog::error("No images to pack into flipbook");
+            return false;
+        }
+        if (options.outputPath.empty() || options.filename.empty()) {
+            spdlog::error("outputPath and filename are required for flipbook output");
+            return false;
+        }
+        if (options.fps <= 0) {
+            spdlog::error("FlipbookOptions::fps must be positive (got {})", options.fps);
+            return false;
+        }
+        if (options.frameWidth < 0) {
+            spdlog::error("FlipbookOptions::frameWidth must be non-negative (got {})", options.frameWidth);
+            return false;
+        }
+        if (options.frameHeight < 0) {
+            spdlog::error("FlipbookOptions::frameHeight must be non-negative (got {})", options.frameHeight);
+            return false;
+        }
+        if (options.maxAtlasWidth <= 0 || options.maxAtlasHeight <= 0) {
+            spdlog::error("FlipbookOptions::maxAtlasWidth/maxAtlasHeight must be positive (got {}x{})",
+                          options.maxAtlasWidth, options.maxAtlasHeight);
+            return false;
+        }
+        if (options.format == AtlasFormat::JPEG &&
+            (options.jpegQuality < 1 || options.jpegQuality > 100)) {
+            spdlog::error("FlipbookOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
+            return false;
+        }
+
+        // Sort frames alphabetically by filename so artists can name them 001.png, 002.png, etc.
+        std::sort(images.begin(), images.end(), [](ImageDetails const& a, ImageDetails const& b) {
+            return a.path.filename() < b.path.filename();
+        });
+
+        // Determine frame dimensions: use explicit size if provided, otherwise derive from largest input.
+        // Each dimension is resolved independently so a partial --frame-size (e.g. width only) is valid.
+        int frameW = options.frameWidth;
+        int frameH = options.frameHeight;
+        for (auto const& img : images) {
+            if (frameW <= 0) {
+                frameW = std::max(frameW, img.dimensions.x);
+            }
+            if (frameH <= 0) {
+                frameH = std::max(frameH, img.dimensions.y);
+            }
+        }
+
+        if (frameW <= 0 || frameH <= 0) {
+            spdlog::error("Could not determine valid frame dimensions (frameW={}, frameH={})", frameW, frameH);
+            return false;
+        }
+
+        int const frameCount = static_cast<int>(images.size());
+        int const cols = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(frameCount)))));
+        int const rows = (frameCount + cols - 1) / cols;
+        int const atlasW = cols * frameW;
+        int const atlasH = rows * frameH;
+
+        constexpr int kMaxAtlasDim = 65536;
+        if (atlasW > kMaxAtlasDim || atlasH > kMaxAtlasDim) {
+            spdlog::error("Flipbook atlas dimensions ({}x{}) exceed maximum allowed ({})",
+                          atlasW, atlasH, kMaxAtlasDim);
+            return false;
+        }
+
+        if ((options.maxAtlasWidth > 0 && atlasW > options.maxAtlasWidth) ||
+            (options.maxAtlasHeight > 0 && atlasH > options.maxAtlasHeight)) {
+            if (options.strict) {
+                spdlog::error("Flipbook atlas ({}x{}) exceeds max dimensions ({}x{})",
+                              atlasW, atlasH, options.maxAtlasWidth, options.maxAtlasHeight);
+                return false;
+            }
+            spdlog::warn("Flipbook atlas ({}x{}) exceeds max dimensions ({}x{})",
+                         atlasW, atlasH, options.maxAtlasWidth, options.maxAtlasHeight);
+        }
+
+        // Check for existing outputs.
+        std::string const ext = FormatExtension(options.format);
+        auto const atlasPath = options.outputPath / (options.filename + ext);
+        auto const jsonPath  = options.outputPath / (options.filename + ".flipbook.json");
+        if (!options.forceOverwrite) {
+            if (std::filesystem::exists(atlasPath)) {
+                spdlog::error("Output already exists (use --force to overwrite): {}", atlasPath.string());
+                return false;
+            }
+            if (std::filesystem::exists(jsonPath)) {
+                spdlog::error("Output already exists (use --force to overwrite): {}", jsonPath.string());
+                return false;
+            }
+        }
+
+        int const kChannels = 4;
+        std::vector<uint8_t> atlasPixels(static_cast<size_t>(atlasW) * atlasH * kChannels, 0);
+
+        if (options.strict) {
+            bool anyOversized = false;
+            for (int i = 0; i < frameCount; ++i) {
+                auto const& img = images[i];
+                if (img.dimensions.x > frameW || img.dimensions.y > frameH) {
+                    spdlog::error("Frame {} ({}x{}) exceeds frame size {}x{}: {}",
+                                  i, img.dimensions.x, img.dimensions.y, frameW, frameH,
+                                  img.path.string());
+                    anyOversized = true;
+                }
+            }
+            if (anyOversized) {
+                return false;
+            }
+        }
+
+        if (!options.dryRun) {
+            try {
+                std::filesystem::create_directories(options.outputPath);
+            } catch (std::filesystem::filesystem_error const& e) {
+                spdlog::error("Failed to create output directory '{}': {}",
+                              options.outputPath.string(), e.what());
+                return false;
+            }
+        }
+
+        for (int i = 0; i < frameCount; ++i) {
+            auto const& imgPath = images[i].path;
+            int srcW = 0;
+            int srcH = 0;
+            int srcCh = 0;
+            stbi_uc* src = stbi_load(imgPath.string().c_str(), &srcW, &srcH, &srcCh, kChannels);
+            if (src == nullptr) {
+                spdlog::error("Failed to load frame image: {}", imgPath.string());
+                return false;
+            }
+
+            if (srcW > frameW || srcH > frameH) {
+                spdlog::warn("Frame {} ({}x{}) exceeds frame size {}x{}, cropping: {}",
+                             i, srcW, srcH, frameW, frameH, imgPath.string());
+            }
+
+            int const col   = i % cols;
+            int const row   = i / cols;
+            int const cellX = col * frameW;
+            int const cellY = row * frameH;
+            // Center the image within its cell, then clamp to the cell boundary for cropping.
+            int const dstX  = cellX + ((frameW - srcW) / 2);
+            int const dstY  = cellY + ((frameH - srcH) / 2);
+
+            int const blitX0 = std::max(dstX, cellX);
+            int const blitY0 = std::max(dstY, cellY);
+            int const blitX1 = std::min(dstX + srcW, cellX + frameW);
+            int const blitY1 = std::min(dstY + srcH, cellY + frameH);
+
+            for (int y = blitY0; y < blitY1; ++y) {
+                int const srcY   = y - dstY;
+                int const srcX   = blitX0 - dstX;
+                int const blitW  = blitX1 - blitX0;
+                auto const srcOff = (static_cast<size_t>(srcY) * srcW + srcX) * kChannels;
+                auto const dstOff = (static_cast<size_t>(y) * atlasW + blitX0) * kChannels;
+                std::memcpy(atlasPixels.data() + dstOff, src + srcOff,
+                            static_cast<size_t>(blitW) * kChannels);
+            }
+
+            stbi_image_free(src);
+            spdlog::info("Frame {}: {}", i, imgPath.string());
+        }
+
+        if (!options.dryRun) {
+            auto const pathStr = atlasPath.string();
+            auto const* pathCStr = pathStr.c_str();
+            int writeResult = 0;
+            switch (options.format) {
+            case AtlasFormat::PNG:
+                writeResult = stbi_write_png(pathCStr, atlasW, atlasH, kChannels,
+                                             atlasPixels.data(), atlasW * kChannels);
+                break;
+            case AtlasFormat::BMP:
+                writeResult = stbi_write_bmp(pathCStr, atlasW, atlasH, kChannels, atlasPixels.data());
+                break;
+            case AtlasFormat::TGA:
+                writeResult = stbi_write_tga(pathCStr, atlasW, atlasH, kChannels, atlasPixels.data());
+                break;
+            case AtlasFormat::JPEG:
+                writeResult = stbi_write_jpg(pathCStr, atlasW, atlasH, kChannels,
+                                             atlasPixels.data(), options.jpegQuality);
+                break;
+            default:
+                spdlog::warn("Unknown AtlasFormat value; defaulting to PNG");
+                writeResult = stbi_write_png(pathCStr, atlasW, atlasH, kChannels,
+                                             atlasPixels.data(), atlasW * kChannels);
+                break;
+            }
+            if (writeResult == 0) {
+                spdlog::error("Failed to write flipbook atlas: {}", atlasPath.string());
+                return false;
+            }
+        }
+
+        auto const loopStr = [](LoopType t) -> std::string {
+            switch (t) {
+            case LoopType::Loop:  return "loop";
+            case LoopType::Stop:  return "stop";
+            case LoopType::Reset: return "reset";
+            default:              return "loop";
+            }
+        }(options.loop);
+
+        auto const recordedAtlas = options.absolutePaths
+            ? std::filesystem::absolute(atlasPath).string()
+            : std::filesystem::relative(atlasPath, options.outputPath).string();
+
+        nlohmann::json j;
+        j["image"]       = recordedAtlas;
+        j["frame_width"]  = frameW;
+        j["frame_height"] = frameH;
+        j["frame_cols"]   = cols;
+        j["frame_rows"]   = rows;
+        j["max_frames"]   = frameCount;
+        j["clips"]        = nlohmann::json::array();
+
+        nlohmann::json clip;
+        clip["name"]  = "default";
+        clip["start"] = 0;
+        clip["end"]   = frameCount - 1;
+        clip["fps"]   = options.fps;
+        clip["loop"]  = loopStr;
+        j["clips"].push_back(clip);
+
+        if (!options.dryRun) {
+            std::ofstream out(jsonPath);
+            if (!out.is_open()) {
+                spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                return false;
+            }
+            out << (options.prettyJson ? j.dump(4) : j.dump());
+            out.flush();
+            if (!out) {
+                spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                return false;
+            }
+        }
+
+        spdlog::info("Wrote flipbook: {} ({} frames, {}x{} grid, {}x{} px)",
+                     jsonPath.string(), frameCount, cols, rows, atlasW, atlasH);
+        return true;
     }
 } // namespace moth_packer
