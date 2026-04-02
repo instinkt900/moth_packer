@@ -16,7 +16,8 @@ class MothPacker(ConanFile):
     exports_sources = "CMakeLists.txt", "version.txt", "include/*", "src/*", "external/stb/*", "external/glob/*"
 
     def set_version(self):
-        self.version = load(self, "version.txt").strip()
+        if not self.version:
+            self.version = load(self, "version.txt").strip()
 
     def requirements(self):
         self.requires("moth_ui/[>=1.5.0]", transitive_headers=True)
