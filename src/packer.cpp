@@ -845,11 +845,14 @@ namespace moth_packer {
         });
 
         // Determine frame dimensions: use explicit size if provided, otherwise derive from largest input.
+        // Each dimension is resolved independently so a partial --frame-size (e.g. width only) is valid.
         int frameW = options.frameWidth;
         int frameH = options.frameHeight;
-        if (frameW <= 0 || frameH <= 0) {
-            for (auto const& img : images) {
+        for (auto const& img : images) {
+            if (frameW <= 0) {
                 frameW = std::max(frameW, img.dimensions.x);
+            }
+            if (frameH <= 0) {
                 frameH = std::max(frameH, img.dimensions.y);
             }
         }
@@ -935,7 +938,7 @@ namespace moth_packer {
             int const row   = i / cols;
             int const cellX = col * frameW;
             int const cellY = row * frameH;
-            // Centre the image within its cell, then clamp to the cell boundary for cropping.
+            // Center the image within its cell, then clamp to the cell boundary for cropping.
             int const dstX  = cellX + ((frameW - srcW) / 2);
             int const dstY  = cellY + ((frameH - srcH) / 2);
 
@@ -976,6 +979,11 @@ namespace moth_packer {
             case AtlasFormat::JPEG:
                 writeResult = stbi_write_jpg(pathCStr, atlasW, atlasH, kChannels,
                                              atlasPixels.data(), options.jpegQuality);
+                break;
+            default:
+                spdlog::warn("Unknown AtlasFormat value; defaulting to PNG");
+                writeResult = stbi_write_png(pathCStr, atlasW, atlasH, kChannels,
+                                             atlasPixels.data(), atlasW * kChannels);
                 break;
             }
             if (writeResult == 0) {

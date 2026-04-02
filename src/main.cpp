@@ -96,7 +96,9 @@ int RunFlipbook(Args const& args) {
         return 1;
     }
     std::vector<moth_packer::ImageDetails> images;
-    CollectImages(args, images);
+    if (!CollectImages(args, images)) {
+        return 1;
+    }
     if (images.empty()) {
         spdlog::error("No images found!");
         return 1;
@@ -132,7 +134,9 @@ int RunPack(Args const& args) {
         return 1;
     }
     std::vector<moth_packer::ImageDetails> images;
-    CollectImages(args, images);
+    if (!CollectImages(args, images)) {
+        return 1;
+    }
     if (images.empty()) {
         spdlog::error("No images found!");
         return 1;
