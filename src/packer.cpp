@@ -561,7 +561,13 @@ namespace moth_packer {
         }
 
         if (!options.dryRun) {
-            std::filesystem::create_directories(options.outputPath);
+            try {
+                std::filesystem::create_directories(options.outputPath);
+            } catch (std::filesystem::filesystem_error const& e) {
+                spdlog::error("Failed to create output directory '{}': {}",
+                              options.outputPath.string(), e.what());
+                return false;
+            }
         }
 
         std::vector<stbrp_rect> stbRects;
@@ -670,7 +676,13 @@ namespace moth_packer {
         }
 
         if (!options.dryRun) {
-            std::filesystem::create_directories(options.outputPath);
+            try {
+                std::filesystem::create_directories(options.outputPath);
+            } catch (std::filesystem::filesystem_error const& e) {
+                spdlog::error("Failed to create output directory '{}': {}",
+                              options.outputPath.string(), e.what());
+                return false;
+            }
         }
 
         constexpr int kChannels = 4;
@@ -894,7 +906,13 @@ namespace moth_packer {
         }
 
         if (!options.dryRun) {
-            std::filesystem::create_directories(options.outputPath);
+            try {
+                std::filesystem::create_directories(options.outputPath);
+            } catch (std::filesystem::filesystem_error const& e) {
+                spdlog::error("Failed to create output directory '{}': {}",
+                              options.outputPath.string(), e.what());
+                return false;
+            }
         }
 
         for (int i = 0; i < frameCount; ++i) {
@@ -1003,6 +1021,11 @@ namespace moth_packer {
                 return false;
             }
             out << (options.prettyJson ? j.dump(4) : j.dump());
+            out.flush();
+            if (!out) {
+                spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                return false;
+            }
         }
 
         spdlog::info("Wrote flipbook: {} ({} frames, {}x{} grid, {}x{} px)",

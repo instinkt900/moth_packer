@@ -5,7 +5,7 @@
 - [ ] `--frame-size <W>x<H>` — constrain all input images to a fixed frame size for flipbook output. Each input image is treated as one animation frame and padded or placed on a uniform grid.
 - [ ] Warn when an input image exceeds the specified frame size; error if `--strict` is also set.
 - [ ] Write a `.flipbook.json` descriptor alongside the atlas when `--frame-size` is used, containing `image`, `frame_width`, `frame_height`, `frame_cols`, `frame_rows`, `max_frames`, `fps` (defaulting to 0/unset, overridable via `--fps <N>`), and `loop` (defaulting to true, overridable via `--no-loop`).
-- [ ] Frame order matters for flipbooks. Default behaviour should be to sort input images alphabetically (artists typically name frames `001.png`, `002.png`, etc.). Consider also supporting an input metadata file that maps clip names to ordered lists of image paths, which would allow multiple named clips to be packed into a single atlas and described in the descriptor without relying on filename conventions.
+- [ ] Frame order matters for flipbooks. Default behavior should be to sort input images alphabetically (artists typically name frames `001.png`, `002.png`, etc.). Consider also supporting an input metadata file that maps clip names to ordered lists of image paths, which would allow multiple named clips to be packed into a single atlas and described in the descriptor without relying on filename conventions.
 
 ## Atlas size control
 

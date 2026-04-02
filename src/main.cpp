@@ -284,7 +284,7 @@ int main(int argc, char* argv[]) {
                               "Frames per second for the default clip (default: 12).")
         ->check(CLI::Range(1, 1000));
 
-    flipbookGroup->add_option("--loop", args.loop, "Loop behaviour for the default clip (default: loop).")
+    flipbookGroup->add_option("--loop", args.loop, "Loop behavior for the default clip (default: loop).")
         ->transform(CLI::CheckedTransformer(
             std::map<std::string, moth_packer::LoopType>{ { "loop", moth_packer::LoopType::Loop },
                                                           { "stop", moth_packer::LoopType::Stop },
