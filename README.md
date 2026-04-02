@@ -4,7 +4,7 @@
 [![Release](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml/badge.svg)](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_ui) layouts. Available as both a **C++ library** (for embedding packing into your own tools) and a **command-line tool**. Supports plain image directories, file lists, and moth_ui layout files as input sources. Outputs a single JSON descriptor alongside one or more atlas images (PNG, BMP, TGA, or JPEG).
+A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_ui) layouts. Available as both a **C++ library** (for embedding packing into your own tools) and a **command-line tool**. Three operating modes: **pack** images into a bin-packed atlas, **flipbook** images into a uniform-grid animation sheet, or **unpack** a sprite sheet back into individual images. Outputs JSON descriptors alongside one or more atlas images (PNG, BMP, TGA, or JPEG).
 
 ---
 
@@ -13,7 +13,8 @@ A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_u
 - [Features](#features)
   - [AI Disclosure](#ai-disclosure)
 - [Usage](#usage)
-  - [Input modes](#input-modes)
+  - [Modes](#modes)
+  - [Input sources](#input-sources)
   - [Options](#options)
   - [Examples](#examples)
 - [Output format](#output-format)
@@ -28,11 +29,13 @@ A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_u
 
 ## Features
 
-**Multiple input modes** — point moth_packer at a directory of images, a glob pattern, a plain text file listing image paths, a single moth_ui layout file, or a directory of layout files. Recursive directory traversal is supported for all directory-based modes.
+**Three modes** — `pack` bins images into the smallest power-of-two atlas (or multiple atlases), `flipbook` lays images out in order on a uniform grid for frame animation, and `unpack` extracts sprites from a sheet by detecting non-transparent regions.
+
+**Multiple input sources** — point moth_packer at a directory of images, a glob pattern, a plain text file listing image paths, a single moth_ui layout file, or a directory of layout files. Recursive directory traversal is supported for all directory-based sources.
 
 **Automatic atlas sizing** — the packer tests power-of-two atlas dimensions between configurable min and max sizes and picks the most space-efficient fit. When images don't all fit in one atlas, additional atlases are created automatically.
 
-**Single JSON descriptor** — all atlases produced in one run are described in a single `.json` file, making it straightforward to load an entire pack at runtime without enumerating files.
+**Single JSON descriptor** — all atlases produced in one run are described in a single `.json` file, making it straightforward to load an entire pack at runtime without enumerating files. Flipbook mode also writes a `.flipbook.json` descriptor with frame grid metadata and clip information.
 
 **Configurable padding** — add a pixel border around each image with four fill modes: solid color (`color`), clamp-to-edge (`extend`), mirrored reflection (`mirror`), or tiling wrap (`wrap`).
 
@@ -49,45 +52,80 @@ AI agents (primarily Claude) are used as tools in this project for tasks such as
 ## Usage
 
 ```
-moth_packer <output> [options]
+moth_packer <path> [options]
 ```
 
-`<output>` is the base name for the pack (no extension). The packer writes `<output>.json` and `<output>_0.<ext>`, `<output>_1.<ext>`, … to the output directory, where `<ext>` is determined by `--format` (default `png`).
+In **pack** and **flipbook** modes, `<path>` is the base name for the output (no extension). The packer writes `<path>.json` and `<path>_0.<ext>`, `<path>_1.<ext>`, … to the output directory. In **unpack** mode, `<path>` is the input sprite sheet to extract from.
 
-### Input modes
+### Modes
 
-Exactly one input mode must be specified:
+| `--mode` | Description |
+|---|---|
+| `pack` *(default)* | Bin-pack images into one or more power-of-two atlases |
+| `flipbook` | Lay images out in alphabetical order on a uniform grid for frame animation |
+| `unpack` | Extract individual sprites from a sprite sheet by detecting non-transparent regions |
+
+### Input sources
+
+Exactly one input source must be specified for `pack` and `flipbook` modes:
 
 | Flag | Description |
 |---|---|
 | `-i, --file <path>` | Text file containing one image path per line |
 | `-d, --dir <path>` | Directory of images |
 | `-g, --glob <pattern>` | Glob pattern (e.g. `assets/**/*.png`) |
-| `--unpack <path>` | Extract sprites from a sprite sheet by detecting non-transparent regions |
 | `-l, --layout <path>` | Single moth_ui layout file |
 | `-x, --layout-dir <path>` | Directory of moth_ui layout files |
 
 ### Options
 
+**General**
+
 | Flag | Default | Description |
 |---|---|---|
+| `--mode <mode>` | `pack` | Operating mode: `pack`, `unpack`, or `flipbook` |
 | `-o, --out <path>` | `.` | Directory to write output files into |
-| `-r, --recursive` | off | Recurse into subdirectories (directory input modes only) |
+| `-r, --recursive` | off | Recurse into subdirectories (directory input sources only) |
 | `-f, --force` | off | Overwrite existing output files and allow packing to succeed with zero atlases (when all images are oversized) |
-| `-n, --min <w,h>` | `256,256` | Minimum atlas dimensions |
-| `-m, --max <w,h>` | `4096,4096` | Maximum atlas dimensions |
-| `-p, --padding <n>` | `0` | Pixels of padding added around each image on all sides |
-| `-t, --padding-type <type>` | `color` | Padding fill mode: `color`, `extend`, `mirror`, or `wrap` |
-| `-c, --padding-color <RRGGBBAA>` | `00000000` | Atlas background color as 8 hex digits; fills the entire atlas before compositing, controlling padding regions and unpacked areas |
+| `--dry-run` | off | Report what would be packed without writing any files |
+| `--verbose` | off | Enable info-level log messages |
+| `--silent` | off | Suppress all output except errors (mutually exclusive with `--verbose`) |
+| `-v, --version` | | Print version and exit |
+
+**Output format**
+
+| Flag | Default | Description |
+|---|---|---|
 | `--format <fmt>` | `png` | Atlas image format: `png`, `bmp`, `tga`, `jpeg` (or `jpg`) |
 | `--jpeg-quality <n>` | `90` | JPEG encode quality 1–100 (only used with `--format jpeg`) |
 | `--pretty` | off | Pretty-print the JSON descriptor with 4-space indentation |
 | `--absolute-paths` | off | Write absolute paths in the JSON descriptor instead of paths relative to the output directory |
-| `--alpha-threshold <n>` | `0` | Alpha threshold for `--unpack` sprite detection (0–255); pixels with alpha > threshold are treated as non-transparent |
-| `--dry-run` | off | Report what would be packed without writing any files |
-| `--verbose` | off | Print a line for every image packed |
-| `--silent` | off | Suppress all output except errors |
-| `-v, --version` | | Print version and exit |
+
+**Pack options**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--min-dim <WxH>` | `256x256` | Minimum atlas dimensions |
+| `--max-dim <WxH>` | `4096x4096` | Maximum atlas dimensions |
+| `-p, --padding <n>` | `0` | Pixels of padding added around each image on all sides |
+| `--padding-type <type>` | `color` | Padding fill mode: `color`, `extend`, `mirror`, or `wrap` |
+| `--padding-color <RRGGBBAA>` | `00000000` | Atlas background color as 8 hex digits; fills the entire atlas before compositing |
+
+**Flipbook options**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--frame-size <WxH>` | *(largest input image)* | Fixed frame cell size; input images are centered and cropped to fit |
+| `--fps <n>` | `12` | Frames per second for the default clip |
+| `--loop <type>` | `loop` | Loop behavior: `loop`, `stop`, or `reset` |
+| `--max-dim <WxH>` | `4096x4096` | Warn (or error with `--strict`) if the atlas exceeds these dimensions |
+| `--strict` | off | Treat frame size and atlas size violations as errors instead of warnings |
+
+**Unpack options**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--alpha-threshold <n>` | `0` | Pixels with alpha above this value are treated as opaque (0–255) |
 
 ### Examples
 
@@ -103,7 +141,7 @@ moth_packer hud -l layouts/hud.moth_layout -o build/atlases
 
 Pack images from a text file list, allowing up to 2048×2048 atlases:
 ```bash
-moth_packer sprites -i sprites.txt -m 2048,2048 -o build/atlases
+moth_packer sprites -i sprites.txt --max-dim 2048x2048 -o build/atlases
 ```
 
 Pack images matching a glob pattern:
@@ -113,17 +151,22 @@ moth_packer sprites -g 'assets/**/*.png' -o build/atlases
 
 Pack with 2-pixel extend padding and pretty-printed JSON:
 ```bash
-moth_packer ui -d assets/images -p 2 -t extend --pretty -o build/atlases
+moth_packer ui -d assets/images -p 2 --padding-type extend --pretty -o build/atlases
+```
+
+Build a flipbook animation sheet from a directory of frames:
+```bash
+moth_packer explosion --mode flipbook -d assets/explosion --frame-size 64x64 --fps 24 -o build/atlases
 ```
 
 Extract sprites from a sprite sheet (transparent background):
 ```bash
-moth_packer --unpack sheet.png -o sprites/
+moth_packer sheet.png --mode unpack -o sprites/
 ```
 
 Extract sprites ignoring near-transparent edge pixels (e.g. from JPEG compression):
 ```bash
-moth_packer --unpack sheet.png --alpha-threshold 10 -o sprites/
+moth_packer sheet.png --mode unpack --alpha-threshold 10 -o sprites/
 ```
 
 Preview what would be packed without writing anything:
@@ -135,7 +178,9 @@ moth_packer ui -d assets/images --dry-run --verbose
 
 ## Output format
 
-Each run produces one `<name>.json` descriptor and one or more `<name>_N.<ext>` atlas images (extension matches `--format`, default `png`). The descriptor lists every atlas and the images packed into it, with their source path and pixel rect within the atlas:
+### Pack
+
+Each pack run produces one `<name>.json` descriptor and one or more `<name>_N.<ext>` atlas images. The descriptor lists every atlas and the images packed into it, with their source path and pixel rect:
 
 ```json
 {
@@ -157,7 +202,33 @@ Each run produces one `<name>.json` descriptor and one or more `<name>_N.<ext>` 
 }
 ```
 
-Paths in the descriptor are relative to the output directory by default. Pass `--absolute-paths` to write absolute paths instead.
+Paths are relative to the output directory by default. Pass `--absolute-paths` to write absolute paths instead.
+
+### Flipbook
+
+A flipbook run produces `<name>_0.<ext>` (the atlas image) and `<name>.flipbook.json`. The descriptor describes the frame grid and the default animation clip:
+
+```json
+{
+  "image": "explosion_0.png",
+  "frame_width": 64,
+  "frame_height": 64,
+  "frame_cols": 4,
+  "frame_rows": 3,
+  "max_frames": 12,
+  "clips": [
+    {
+      "name": "default",
+      "start": 0,
+      "end": 11,
+      "fps": 24,
+      "loop": "loop"
+    }
+  ]
+}
+```
+
+`loop` is one of `loop`, `stop`, or `reset`.
 
 ---
 
