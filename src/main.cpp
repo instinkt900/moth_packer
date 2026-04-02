@@ -56,7 +56,6 @@ struct Args {
     moth_packer::LoopType loop = moth_packer::LoopType::Loop;
     std::pair<int, int> frameSize{ 0, 0 };
     bool strict = false;
-    bool maxDimSupplied = false;
 };
 
 static bool CollectImages(Args const& args, std::vector<moth_packer::ImageDetails>& images) {
@@ -96,9 +95,7 @@ int RunFlipbook(Args const& args) {
         return 1;
     }
     std::vector<moth_packer::ImageDetails> images;
-    if (!CollectImages(args, images)) {
-        return 1;
-    }
+    CollectImages(args, images);
     if (images.empty()) {
         spdlog::error("No images found!");
         return 1;
@@ -116,11 +113,9 @@ int RunFlipbook(Args const& args) {
     opts.loop          = args.loop;
     opts.frameWidth    = args.frameSize.first;
     opts.frameHeight   = args.frameSize.second;
-    opts.strict        = args.strict;
-    if (args.maxDimSupplied) {
-        opts.maxAtlasWidth  = args.maxDimensions.first;
-        opts.maxAtlasHeight = args.maxDimensions.second;
-    }
+    opts.strict         = args.strict;
+    opts.maxAtlasWidth  = args.maxDimensions.first;
+    opts.maxAtlasHeight = args.maxDimensions.second;
     return moth_packer::Flipbook(std::move(images), opts) ? 0 : 1;
 }
 
@@ -134,9 +129,7 @@ int RunPack(Args const& args) {
         return 1;
     }
     std::vector<moth_packer::ImageDetails> images;
-    if (!CollectImages(args, images)) {
-        return 1;
-    }
+    CollectImages(args, images);
     if (images.empty()) {
         spdlog::error("No images found!");
         return 1;
@@ -250,8 +243,7 @@ int main(int argc, char* argv[]) {
                                       args.minDimensions.second))
         ->delimiter('x');
 
-    auto* optionMaxDim =
-        packGroup->add_option("--max-dim",
+    packGroup->add_option("--max-dim",
                               args.maxDimensions,
                               fmt::format("Maximum atlas dimensions WxH (default: {}x{}).",
                                           args.maxDimensions.first,
@@ -311,8 +303,6 @@ int main(int argc, char* argv[]) {
     }
 
     CLI11_PARSE(app, argc, argv);
-
-    args.maxDimSupplied = optionMaxDim->count() != 0;
 
     if (verboseMode) {
         spdlog::set_level(spdlog::level::trace);

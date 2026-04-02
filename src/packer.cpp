@@ -838,6 +838,15 @@ namespace moth_packer {
             spdlog::error("outputPath and filename are required for flipbook output");
             return false;
         }
+        if (options.fps <= 0) {
+            spdlog::error("FlipbookOptions::fps must be positive (got {})", options.fps);
+            return false;
+        }
+        if (options.format == AtlasFormat::JPEG &&
+            (options.jpegQuality < 1 || options.jpegQuality > 100)) {
+            spdlog::error("FlipbookOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
+            return false;
+        }
 
         // Sort frames alphabetically by filename so artists can name them 001.png, 002.png, etc.
         std::sort(images.begin(), images.end(), [](ImageDetails const& a, ImageDetails const& b) {
@@ -857,11 +866,23 @@ namespace moth_packer {
             }
         }
 
+        if (frameW <= 0 || frameH <= 0) {
+            spdlog::error("Could not determine valid frame dimensions (frameW={}, frameH={})", frameW, frameH);
+            return false;
+        }
+
         int const frameCount = static_cast<int>(images.size());
         int const cols = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(frameCount)))));
         int const rows = (frameCount + cols - 1) / cols;
         int const atlasW = cols * frameW;
         int const atlasH = rows * frameH;
+
+        constexpr int kMaxAtlasDim = 65536;
+        if (atlasW > kMaxAtlasDim || atlasH > kMaxAtlasDim) {
+            spdlog::error("Flipbook atlas dimensions ({}x{}) exceed maximum allowed ({})",
+                          atlasW, atlasH, kMaxAtlasDim);
+            return false;
+        }
 
         if ((options.maxAtlasWidth > 0 && atlasW > options.maxAtlasWidth) ||
             (options.maxAtlasHeight > 0 && atlasH > options.maxAtlasHeight)) {
