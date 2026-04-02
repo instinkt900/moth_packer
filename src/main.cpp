@@ -166,6 +166,7 @@ int main(int argc, char* argv[]) {
 
     Args args;
 
+    // --- General ---
     app.add_option("path", args.path,
                    "Output name for pack/flipbook modes (no extension), or input sheet path for unpack mode.");
 
@@ -175,78 +176,49 @@ int main(int argc, char* argv[]) {
                                          { "unpack", Mode::Unpack },
                                          { "flipbook", Mode::Flipbook } }));
 
-    auto* group = app.add_option_group("input source (required for pack and flipbook modes)");
-    group->require_option(0, 1);
-
-    auto* optionFile =
-        group->add_option("-i,--file", args.inputTxt, "Input is given as a list of files in a txt file.")
-            ->check(CLI::ExistingFile);
-    auto* optionDir = group->add_option("-d,--dir", args.inputDir, "Input is all files in a directory.")
-                          ->check(CLI::ExistingDirectory);
-    auto* optionLayout =
-        group->add_option("-l,--layout", args.inputLayout, "Input is a single moth_ui layout file.")
-            ->check(CLI::ExistingFile);
-    auto* optionLayoutDir =
-        group->add_option("-x,--layout-dir", args.inputLayoutDir, "Input is a directory of moth_ui layout files.")
-            ->check(CLI::ExistingDirectory);
-    auto* optionGlob =
-        group->add_option("-g,--glob", args.inputGlob, "Input is a glob pattern (e.g. assets/**/*.png).");
-
-    app.add_flag("-r,--recursive", args.recursiveInput, "Recurse into subdirectories")->default_val(false);
-    app.add_flag("-f,--force", args.forceOverwrite, "Force overwritting of output.")->default_val(false);
-
-    app.add_option("-o,--out", args.outputDir, "Path to directory where output files will be written")
+    app.add_option("-o,--out", args.outputDir, "Path to directory where output files will be written.")
         ->default_val(".");
 
-    app.add_option("--min-dim",
-                   args.minDimensions,
-                   fmt::format("Min atlas dimensions WxH (default: {}x{})",
-                               args.minDimensions.first,
-                               args.minDimensions.second))
-        ->delimiter('x');
+    app.add_flag("-f,--force", args.forceOverwrite, "Force overwriting of existing output files.")
+        ->default_val(false);
 
-    auto* optionMaxDim =
-        app.add_option("--max-dim",
-                       args.maxDimensions,
-                       fmt::format("Max atlas dimensions WxH (default: {}x{})",
-                                   args.maxDimensions.first,
-                                   args.maxDimensions.second))
-            ->delimiter('x');
-
-    app.add_option("-p,--padding", args.padding, "Padding around images.")->default_val(0);
-
-    app.add_option("--padding-type", args.paddingType, "Padding type")
-        ->transform(CLI::CheckedTransformer(
-            std::map<std::string, moth_packer::PaddingType>{ { "color", moth_packer::PaddingType::Color },
-                                                             { "extend", moth_packer::PaddingType::Extend },
-                                                             { "mirror", moth_packer::PaddingType::Mirror },
-                                                             { "wrap", moth_packer::PaddingType::Wrap } }));
-
-    app.add_option("--padding-color", args.paddingColor, "Padding color as RRGGBBAA hex")
-        ->transform([](std::string const& val) -> std::string {
-            if (val.size() != 8 || val.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
-                throw CLI::ValidationError("-c,--padding-color", "must be exactly 8 hex digits");
-            }
-            return std::to_string(std::stoul(val, nullptr, 16));
-        });
-
-    app.add_option("--alpha-threshold", args.alphaThreshold,
-                   "Alpha threshold for sprite detection in unpack mode (0-255, default: 0)")
-        ->check(CLI::Range(0, 255));
+    app.add_flag("--dry-run", args.dryRun, "Run without writing any files.")
+        ->default_val(false);
 
     bool verboseMode = false;
-    app.add_flag("--verbose", verboseMode, "Verbose mode. All output not just errors and warnings.")
+    app.add_flag("--verbose", verboseMode, "Enable verbose output (info-level messages).")
         ->default_val(false);
 
     bool silentMode = false;
-    app.add_flag("--silent", silentMode, "Silent mode. No output.")->default_val(false);
-
-    app.add_flag("--dry-run", args.dryRun, "Dry run. No files written.")->default_val(false);
-    app.add_flag("--pretty", args.prettyJson, "Pretty print the output JSON.")->default_val(false);
-    app.add_flag("--absolute-paths", args.absolutePaths, "Write absolute paths in the output JSON.")
+    app.add_flag("--silent", silentMode, "Suppress all output including warnings.")
         ->default_val(false);
 
-    app.add_option("--format", args.atlasFormat, "Output image format for atlas files (default: png)")
+    // --- Input source (pack and flipbook) ---
+    auto* inputGroup = app.add_option_group("input source (required for pack and flipbook modes)");
+    inputGroup->require_option(0, 1);
+
+    auto* optionFile =
+        inputGroup->add_option("-i,--file", args.inputTxt, "List of input image paths, one per line.")
+            ->check(CLI::ExistingFile);
+    auto* optionDir =
+        inputGroup->add_option("-d,--dir", args.inputDir, "All images in a directory.")
+            ->check(CLI::ExistingDirectory);
+    auto* optionLayout =
+        inputGroup->add_option("-l,--layout", args.inputLayout, "Images referenced by a moth_ui layout file.")
+            ->check(CLI::ExistingFile);
+    auto* optionLayoutDir =
+        inputGroup->add_option("-x,--layout-dir", args.inputLayoutDir, "Images referenced by all layouts in a directory.")
+            ->check(CLI::ExistingDirectory);
+    auto* optionGlob =
+        inputGroup->add_option("-g,--glob", args.inputGlob, "Images matching a glob pattern (e.g. assets/**/*.png).");
+
+    app.add_flag("-r,--recursive", args.recursiveInput, "Recurse into subdirectories when using --dir or --layout-dir.")
+        ->default_val(false);
+
+    // --- Output format (all modes) ---
+    auto* outputGroup = app.add_option_group("output format");
+
+    outputGroup->add_option("--format", args.atlasFormat, "Image format for output atlas files (default: png).")
         ->transform(CLI::CheckedTransformer(
             std::map<std::string, moth_packer::AtlasFormat>{ { "png", moth_packer::AtlasFormat::PNG },
                                                              { "bmp", moth_packer::AtlasFormat::BMP },
@@ -254,26 +226,80 @@ int main(int argc, char* argv[]) {
                                                              { "jpeg", moth_packer::AtlasFormat::JPEG },
                                                              { "jpg", moth_packer::AtlasFormat::JPEG } }));
 
-    app.add_option("--jpeg-quality", args.jpegQuality, "JPEG encode quality 1-100 (default: 90, only used with --format jpeg)")
+    outputGroup->add_option("--jpeg-quality", args.jpegQuality,
+                            "JPEG encode quality 1-100 (default: 90, only used with --format jpeg).")
         ->check(CLI::Range(1, 100));
 
-    app.add_option("--fps", args.fps, "Frames per second for the default flipbook clip (default: 12, flipbook mode only)")
-        ->check(CLI::Range(1, 1000));
+    outputGroup->add_flag("--pretty", args.prettyJson, "Pretty-print the output JSON.")
+        ->default_val(false);
 
-    app.add_option("--frame-size", args.frameSize,
-                   "Fixed frame size as WxH (flipbook mode only). Defaults to the largest input image dimensions.")
+    outputGroup->add_flag("--absolute-paths", args.absolutePaths, "Write absolute paths in the output JSON.")
+        ->default_val(false);
+
+    // --- Pack options ---
+    auto* packGroup = app.add_option_group("pack options");
+
+    packGroup->add_option("--min-dim",
+                          args.minDimensions,
+                          fmt::format("Minimum atlas dimensions WxH (default: {}x{}).",
+                                      args.minDimensions.first,
+                                      args.minDimensions.second))
+        ->delimiter('x');
+
+    auto* optionMaxDim =
+        packGroup->add_option("--max-dim",
+                              args.maxDimensions,
+                              fmt::format("Maximum atlas dimensions WxH (default: {}x{}).",
+                                          args.maxDimensions.first,
+                                          args.maxDimensions.second))
+            ->delimiter('x');
+
+    packGroup->add_option("-p,--padding", args.padding, "Pixels of padding around each image.")
+        ->default_val(0);
+
+    packGroup->add_option("--padding-type", args.paddingType, "Padding fill strategy (default: color).")
+        ->transform(CLI::CheckedTransformer(
+            std::map<std::string, moth_packer::PaddingType>{ { "color", moth_packer::PaddingType::Color },
+                                                             { "extend", moth_packer::PaddingType::Extend },
+                                                             { "mirror", moth_packer::PaddingType::Mirror },
+                                                             { "wrap", moth_packer::PaddingType::Wrap } }));
+
+    packGroup->add_option("--padding-color", args.paddingColor, "Padding fill color as RRGGBBAA hex.")
+        ->transform([](std::string const& val) -> std::string {
+            if (val.size() != 8 || val.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
+                throw CLI::ValidationError("--padding-color", "must be exactly 8 hex digits");
+            }
+            return std::to_string(std::stoul(val, nullptr, 16));
+        });
+
+    // --- Flipbook options ---
+    auto* flipbookGroup = app.add_option_group("flipbook options");
+
+    flipbookGroup->add_option("--frame-size", args.frameSize,
+                              "Fixed frame cell size as WxH. Defaults to the largest input image dimensions.")
         ->delimiter('x')
         ->check(CLI::PositiveNumber);
 
-    app.add_flag("--strict", args.strict,
-                 "Treat oversized frames as errors instead of cropping them (flipbook mode only).")
-        ->default_val(false);
+    flipbookGroup->add_option("--fps", args.fps,
+                              "Frames per second for the default clip (default: 12).")
+        ->check(CLI::Range(1, 1000));
 
-    app.add_option("--loop", args.loop, "Loop behaviour for the default flipbook clip (default: loop, flipbook mode only)")
+    flipbookGroup->add_option("--loop", args.loop, "Loop behaviour for the default clip (default: loop).")
         ->transform(CLI::CheckedTransformer(
             std::map<std::string, moth_packer::LoopType>{ { "loop", moth_packer::LoopType::Loop },
                                                           { "stop", moth_packer::LoopType::Stop },
                                                           { "reset", moth_packer::LoopType::Reset } }));
+
+    flipbookGroup->add_flag("--strict", args.strict,
+                            "Treat frame size and atlas size violations as errors rather than warnings.")
+        ->default_val(false);
+
+    // --- Unpack options ---
+    auto* unpackGroup = app.add_option_group("unpack options");
+
+    unpackGroup->add_option("--alpha-threshold", args.alphaThreshold,
+                            "Pixels with alpha above this value are treated as opaque (0-255, default: 0).")
+        ->check(CLI::Range(0, 255));
 
     if (argc == 1) {
         std::cout << app.help();
