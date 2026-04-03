@@ -3,6 +3,36 @@
 All notable changes to this project will be documented in this file.
 Entries are generated automatically from git history using [git-cliff](https://github.com/orhun/git-cliff).
 
+## [0.4.0] - 2026-04-03
+### Features
+- Add --unpack command to extract sprites from a sprite sheet
+- Implement flipbook mode
+- Add --frame-size, --strict, and --max-dim checks for flipbook mode
+
+### Bug Fixes
+- Spelling, stream error handling, and directory creation error handling
+- Code review findings in flipbook and pack modes
+- Code review findings in flipbook validation and option handling
+- Add input validation and mutual-exclusion guards
+- Align --verbose log level with help text and guard mode switch default
+- Respect --version override in conanfile set_version
+- Frame size auto-detection uses first image size instead of max
+
+### Refactoring
+- Extract mode handlers and Args struct from main
+- Reorganise CLI arguments into labelled option groups
+
+### Documentation
+- Update README for flipbook mode and revised CLI
+- Updating todo file
+
+### Miscellaneous
+- Standardize to US English spelling throughout
+- Tidy TODO — remove completed and duplicate items
+
+### Changes
+- Bump version from 0.3.0 to 0.4.0
+
 ## [0.3.0] - 2026-03-27
 ### Features
 - Implement padding fill in CommitPack (color, extend, mirror, wrap)
