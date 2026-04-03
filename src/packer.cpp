@@ -871,10 +871,10 @@ namespace moth_packer {
         int frameW = options.frameWidth;
         int frameH = options.frameHeight;
         for (auto const& img : images) {
-            if (frameW <= 0) {
+            if (options.frameWidth <= 0) {
                 frameW = std::max(frameW, img.dimensions.x);
             }
-            if (frameH <= 0) {
+            if (options.frameHeight <= 0) {
                 frameH = std::max(frameH, img.dimensions.y);
             }
         }
