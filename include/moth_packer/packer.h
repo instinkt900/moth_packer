@@ -195,6 +195,7 @@ namespace moth_packer {
         bool strict = false;                        ///< If true, oversized frames and atlas size violations cause errors instead of warnings.
         int maxAtlasWidth = 0;                      ///< Maximum atlas width in pixels. 0 = no limit.
         int maxAtlasHeight = 0;                     ///< Maximum atlas height in pixels. 0 = no limit.
+        uint32_t paddingColor = 0;                  ///< Atlas background fill colour as RRGGBBAA. Applied to every pixel before frames are composited.
     };
 
     /// @brief Pack images into a uniform-grid flipbook sheet and write a JSON descriptor.

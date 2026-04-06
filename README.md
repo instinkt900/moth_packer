@@ -125,6 +125,7 @@ Exactly one input source must be specified for `pack` and `flipbook` modes:
 | `--loop <type>` | `loop` | Loop behavior: `loop`, `stop`, or `reset` |
 | `--max-dim <WxH>` | `4096x4096` | Warn (or error with `--strict`) if the atlas exceeds these dimensions |
 | `--strict` | off | Treat frame size and atlas size violations as errors instead of warnings |
+| `--padding-color <RRGGBBAA>` | `00000000` | Atlas background fill color as 8 hex digits; applied to every pixel before frames are composited |
 
 **Unpack options**
 

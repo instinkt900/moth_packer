@@ -148,6 +148,7 @@ int RunFlipbook(Args const& args) {
     opts.strict         = args.strict;
     opts.maxAtlasWidth  = args.maxDimensions.first;
     opts.maxAtlasHeight = args.maxDimensions.second;
+    opts.paddingColor   = args.paddingColor;
     return moth_packer::Flipbook(std::move(images), opts) ? 0 : 1;
 }
 

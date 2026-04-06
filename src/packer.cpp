@@ -991,7 +991,19 @@ namespace moth_packer {
         }
 
         int const kChannels = 4;
-        std::vector<uint8_t> atlasPixels(static_cast<size_t>(atlasW) * atlasH * kChannels, 0);
+        std::vector<uint8_t> atlasPixels(static_cast<size_t>(atlasW) * atlasH * kChannels);
+        {
+            uint8_t const bg_r = static_cast<uint8_t>((options.paddingColor >> 24) & 0xFF);
+            uint8_t const bg_g = static_cast<uint8_t>((options.paddingColor >> 16) & 0xFF);
+            uint8_t const bg_b = static_cast<uint8_t>((options.paddingColor >>  8) & 0xFF);
+            uint8_t const bg_a = static_cast<uint8_t>( options.paddingColor        & 0xFF);
+            for (size_t i = 0; i < atlasPixels.size(); i += kChannels) {
+                atlasPixels[i + 0] = bg_r;
+                atlasPixels[i + 1] = bg_g;
+                atlasPixels[i + 2] = bg_b;
+                atlasPixels[i + 3] = bg_a;
+            }
+        }
 
         if (options.strict) {
             bool anyOversized = false;
