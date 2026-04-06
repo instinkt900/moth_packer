@@ -131,10 +131,11 @@ Exactly one input source must be specified for `pack` and `flipbook` modes:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--alpha-threshold <n>` | `0` | Pixels with alpha above this value are treated as opaque (0–255). Only used when no background colour is active. |
-| `--auto-bg` | off | Infer background colour by sampling the four corner pixels. Falls back to alpha detection if corners disagree. |
-| `--bg-colour <RRGGBB>` | — | Explicit background colour as a 6-digit hex value (e.g. `FF00FF`). Overrides `--auto-bg` and `--alpha-threshold`. |
-| `--colour-threshold <n>` | `10` | Per-channel tolerance when comparing pixels against the background colour (0–255). |
+| `--alpha-threshold <n>` | `0` | Pixels with alpha above this value are treated as opaque (0–255). Only used when no background color is active. |
+| `--auto-bg` | off | Infer background color by sampling the four corner pixels. Falls back to alpha detection if corners disagree. |
+| `--bg-color <RRGGBB>` | — | Explicit background color as a 6-digit hex value (e.g. `FF00FF`). Overrides `--auto-bg` and `--alpha-threshold`. |
+| `--color-threshold <n>` | `10` | Per-channel tolerance when comparing pixels against the background color (0–255). |
+| `--replace-bg-color <RRGGBBAA>` | — | Replace detected background pixels in each extracted sprite with this color. Use `00000000` for full transparency. Requires a background detection mode. |
 
 ### Examples
 
@@ -178,19 +179,24 @@ Extract sprites ignoring near-transparent edge pixels (e.g. from JPEG compressio
 moth_packer sheet.png --mode unpack --alpha-threshold 10 -o sprites/
 ```
 
-Extract sprites from a sheet with a uniform solid background (auto-detect colour from corners):
+Extract sprites from a sheet with a uniform solid background (auto-detect color from corners):
 ```bash
 moth_packer sheet.png --mode unpack --auto-bg -o sprites/
 ```
 
 Extract sprites from a sheet with a known magenta background:
 ```bash
-moth_packer sheet.png --mode unpack --bg-colour FF00FF -o sprites/
+moth_packer sheet.png --mode unpack --bg-color FF00FF -o sprites/
 ```
 
 Extract sprites, discarding stray-pixel noise smaller than 8×8:
 ```bash
 moth_packer sheet.png --mode unpack --min-dim 8x8 -o sprites/
+```
+
+Extract sprites from a sheet with a magenta background, replacing that background with transparency:
+```bash
+moth_packer sheet.png --mode unpack --bg-color FF00FF --replace-bg-color 00000000 -o sprites/
 ```
 
 Preview what would be packed without writing anything:

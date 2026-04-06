@@ -128,37 +128,42 @@ namespace moth_packer {
     struct UnpackOptions {
         std::filesystem::path outputPath;       ///< Directory where extracted sprites are written.
         std::string spritePrefix = "sprite";    ///< Filename prefix for extracted sprite files (e.g. "sprite" → sprite_0.png).
-        uint8_t alphaThreshold = 0;             ///< Pixels with alpha strictly greater than this are treated as non-transparent. Only used when no background colour is active.
+        uint8_t alphaThreshold = 0;             ///< Pixels with alpha strictly greater than this are treated as non-transparent. Only used when no background color is active.
         bool forceOverwrite = false;            ///< Overwrite existing sprite files without error.
         bool dryRun = false;                    ///< Detect sprites and report but do not write any files.
         AtlasFormat format = AtlasFormat::PNG;  ///< Output image format for extracted sprites.
         int jpegQuality = 90;                   ///< JPEG encode quality (1–100). Only used when format is AtlasFormat::JPEG.
 
-        /// Explicit background colour (RGB). When set, a pixel is considered background when all
-        /// three channels are within colourThreshold of this colour. Takes precedence over
+        /// Explicit background color (RGB). When set, a pixel is considered background when all
+        /// three channels are within colorThreshold of this color. Takes precedence over
         /// alphaThreshold and autoDetectBackground.
-        std::optional<std::array<uint8_t, 3>> backgroundColour;
+        std::optional<std::array<uint8_t, 3>> backgroundColor;
 
-        /// When true and backgroundColour is not set, the background colour is inferred by sampling
+        /// When true and backgroundColor is not set, the background color is inferred by sampling
         /// the four corner pixels of the sheet. Falls back to alpha-based detection if the corners
-        /// differ by more than colourThreshold on any channel.
+        /// differ by more than colorThreshold on any channel.
         bool autoDetectBackground = false;
 
-        /// Per-channel tolerance used when comparing pixels against the background colour (0–255).
-        uint8_t colourThreshold = 10;
+        /// Per-channel tolerance used when comparing pixels against the background color (0–255).
+        uint8_t colorThreshold = 10;
 
         int minSpriteWidth = 0;   ///< Minimum sprite width  to keep (0 = no minimum).
         int minSpriteHeight = 0;  ///< Minimum sprite height to keep (0 = no minimum).
         int maxSpriteWidth = 0;   ///< Maximum sprite width  to keep (0 = no maximum).
         int maxSpriteHeight = 0;  ///< Maximum sprite height to keep (0 = no maximum).
+
+        /// When set, pixels identified as background within each extracted sprite's bounding rect
+        /// are replaced with this color (RRGGBBAA) in the output image instead of being copied
+        /// from the sheet. Pass 0x00000000 to replace background with full transparency.
+        std::optional<uint32_t> replaceBackgroundColor;
     };
 
     /// @brief Extract individual sprites from a sprite sheet by detecting connected non-background regions.
     ///
     /// A pixel is "active" (part of a sprite) based on the active detection mode:
-    /// - If backgroundColour is set: pixel is active when any RGB channel differs from the
-    ///   background by more than colourThreshold.
-    /// - If autoDetectBackground is true: background colour is inferred from the four corner pixels
+    /// - If backgroundColor is set: pixel is active when any RGB channel differs from the
+    ///   background by more than colorThreshold.
+    /// - If autoDetectBackground is true: background color is inferred from the four corner pixels
     ///   (falls back to alpha if corners disagree).
     /// - Otherwise: pixel is active when alpha > alphaThreshold.
     ///
@@ -195,7 +200,7 @@ namespace moth_packer {
         bool strict = false;                        ///< If true, oversized frames and atlas size violations cause errors instead of warnings.
         int maxAtlasWidth = 0;                      ///< Maximum atlas width in pixels. 0 = no limit.
         int maxAtlasHeight = 0;                     ///< Maximum atlas height in pixels. 0 = no limit.
-        uint32_t paddingColor = 0;                  ///< Atlas background fill colour as RRGGBBAA. Applied to every pixel before frames are composited.
+        uint32_t paddingColor = 0;                  ///< Atlas background fill color as RRGGBBAA. Applied to every pixel before frames are composited.
     };
 
     /// @brief Pack images into a uniform-grid flipbook sheet and write a JSON descriptor.

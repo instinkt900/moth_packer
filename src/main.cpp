@@ -46,8 +46,9 @@ struct Args {
 
     int alphaThreshold = 0;
     bool autoDetectBackground = false;
-    std::string backgroundColour;   // hex RRGGBB, empty = not set
-    int colourThreshold = 10;
+    std::string backgroundColor;        // hex RRGGBB, empty = not set
+    int colorThreshold = 10;
+    std::string replaceBackgroundColor; // hex RRGGBBAA, empty = not set
 
     bool prettyJson = false;
     bool absolutePaths = false;
@@ -88,7 +89,7 @@ int RunUnpack(Args const& args) {
     opts.format              = args.atlasFormat;
     opts.jpegQuality         = args.jpegQuality;
     opts.autoDetectBackground = args.autoDetectBackground;
-    opts.colourThreshold     = static_cast<uint8_t>(args.colourThreshold);
+    opts.colorThreshold     = static_cast<uint8_t>(args.colorThreshold);
     if (args.minDimExplicit) {
         opts.minSpriteWidth  = args.minDimensions.first;
         opts.minSpriteHeight = args.minDimensions.second;
@@ -97,20 +98,33 @@ int RunUnpack(Args const& args) {
         opts.maxSpriteWidth  = args.maxDimensions.first;
         opts.maxSpriteHeight = args.maxDimensions.second;
     }
-    if (!args.backgroundColour.empty()) {
-        if (args.backgroundColour.size() != 6) {
-            spdlog::error("--bg-colour must be a 6-digit hex value (e.g. FF00FF)");
+    if (!args.backgroundColor.empty()) {
+        if (args.backgroundColor.size() != 6) {
+            spdlog::error("--bg-color must be a 6-digit hex value (e.g. FF00FF)");
             return 1;
         }
         try {
-            unsigned long const rgb = std::stoul(args.backgroundColour, nullptr, 16);
-            opts.backgroundColour = std::array<uint8_t, 3>{
+            unsigned long const rgb = std::stoul(args.backgroundColor, nullptr, 16);
+            opts.backgroundColor = std::array<uint8_t, 3>{
                 static_cast<uint8_t>((rgb >> 16) & 0xFF),
                 static_cast<uint8_t>((rgb >>  8) & 0xFF),
                 static_cast<uint8_t>( rgb        & 0xFF),
             };
         } catch (std::exception const&) {
-            spdlog::error("--bg-colour value '{}' is not a valid hex value", args.backgroundColour);
+            spdlog::error("--bg-color value '{}' is not a valid hex value", args.backgroundColor);
+            return 1;
+        }
+    }
+    if (!args.replaceBackgroundColor.empty()) {
+        if (args.replaceBackgroundColor.size() != 8) {
+            spdlog::error("--replace-bg-color must be an 8-digit hex value (e.g. FF00FF00)");
+            return 1;
+        }
+        try {
+            opts.replaceBackgroundColor = static_cast<uint32_t>(
+                std::stoul(args.replaceBackgroundColor, nullptr, 16));
+        } catch (std::exception const&) {
+            spdlog::error("--replace-bg-color value '{}' is not a valid hex value", args.replaceBackgroundColor);
             return 1;
         }
     }
@@ -331,20 +345,25 @@ int main(int argc, char* argv[]) {
 
     unpackGroup->add_option("--alpha-threshold", args.alphaThreshold,
                             "Pixels with alpha above this value are treated as opaque (0-255, default: 0). "
-                            "Only used when no background colour is active.")
+                            "Only used when no background color is active.")
         ->check(CLI::Range(0, 255));
 
     unpackGroup->add_flag("--auto-bg", args.autoDetectBackground,
-                          "Auto-detect background colour by sampling the four corners of the sheet. "
+                          "Auto-detect background color by sampling the four corners of the sheet. "
                           "Falls back to alpha-based detection if the corners disagree.");
 
-    unpackGroup->add_option("--bg-colour", args.backgroundColour,
-                            "Explicit background colour as a 6-digit hex value (e.g. FF00FF). "
+    unpackGroup->add_option("--bg-color", args.backgroundColor,
+                            "Explicit background color as a 6-digit hex value (e.g. FF00FF). "
                             "Overrides --auto-bg and --alpha-threshold.");
 
-    unpackGroup->add_option("--colour-threshold", args.colourThreshold,
-                            "Per-channel tolerance when comparing pixels against the background colour (0-255, default: 10).")
+    unpackGroup->add_option("--color-threshold", args.colorThreshold,
+                            "Per-channel tolerance when comparing pixels against the background color (0-255, default: 10).")
         ->check(CLI::Range(0, 255));
+
+    unpackGroup->add_option("--replace-bg-color", args.replaceBackgroundColor,
+                            "Replace detected background pixels in each extracted sprite with this color, "
+                            "given as an 8-digit hex RRGGBBAA value (e.g. 00000000 for full transparency). "
+                            "Requires a background detection mode (--bg-color, --auto-bg, or --alpha-threshold).");
 
     if (argc == 1) {
         std::cout << app.help();

@@ -695,12 +695,12 @@ namespace moth_packer {
             return false;
         }
 
-        // Resolve which background colour to use for sprite detection.
-        // Priority: explicit backgroundColour > autoDetectBackground > alpha threshold.
-        std::optional<std::array<uint8_t, 3>> bgColour = options.backgroundColour;
-        if (!bgColour.has_value() && options.autoDetectBackground) {
-            // Sample the four corners. If they agree within colourThreshold on every
-            // channel, use their average as the background colour.
+        // Resolve which background color to use for sprite detection.
+        // Priority: explicit backgroundColor > autoDetectBackground > alpha threshold.
+        std::optional<std::array<uint8_t, 3>> bgColor = options.backgroundColor;
+        if (!bgColor.has_value() && options.autoDetectBackground) {
+            // Sample the four corners. If they agree within colorThreshold on every
+            // channel, use their average as the background color.
             struct Corner { int x; int y; };
             std::array<Corner, 4> const corners{{ {0, 0}, {width - 1, 0}, {0, height - 1}, {width - 1, height - 1} }};
             std::array<std::array<uint8_t, 3>, 4> samples{};
@@ -716,7 +716,7 @@ namespace moth_packer {
                     lo = std::min(lo, samples[i][ch]);
                     hi = std::max(hi, samples[i][ch]);
                 }
-                if ((hi - lo) > options.colourThreshold) {
+                if ((hi - lo) > options.colorThreshold) {
                     cornersAgree = false;
                 }
             }
@@ -727,8 +727,8 @@ namespace moth_packer {
                     for (auto const& s : samples) { sum += s[ch]; }
                     avg[ch] = static_cast<uint8_t>(sum / 4);
                 }
-                bgColour = avg;
-                spdlog::info("Auto-detected background colour: #{:02X}{:02X}{:02X}",
+                bgColor = avg;
+                spdlog::info("Auto-detected background color: #{:02X}{:02X}{:02X}",
                              avg[0], avg[1], avg[2]);
             } else {
                 spdlog::warn("Corner pixels disagree; falling back to alpha-based detection");
@@ -737,7 +737,7 @@ namespace moth_packer {
 
         // Sprite detection uses a BFS flood fill over the pixel grid.
         // A pixel is "active" (part of a sprite) when it is not background:
-        //   - colour mode: any RGB channel differs from bgColour by more than colourThreshold
+        //   - color mode: any RGB channel differs from bgColor by more than colorThreshold
         //   - alpha mode:  alpha channel exceeds alphaThreshold
         // Each BFS seed finds one connected component (sprite), using
         // 8-connectivity so diagonally touching pixels belong to the same sprite.
@@ -747,11 +747,11 @@ namespace moth_packer {
 
         auto isActive = [&](int x, int y) -> bool {
             size_t const base = ((static_cast<size_t>(y) * width + x) * kChannels);
-            if (bgColour.has_value()) {
-                auto const& bg = bgColour.value();
-                return std::abs(int{pixels[base + 0]} - int{bg[0]}) > options.colourThreshold ||
-                       std::abs(int{pixels[base + 1]} - int{bg[1]}) > options.colourThreshold ||
-                       std::abs(int{pixels[base + 2]} - int{bg[2]}) > options.colourThreshold;
+            if (bgColor.has_value()) {
+                auto const& bg = bgColor.value();
+                return std::abs(int{pixels[base + 0]} - int{bg[0]}) > options.colorThreshold ||
+                       std::abs(int{pixels[base + 1]} - int{bg[1]}) > options.colorThreshold ||
+                       std::abs(int{pixels[base + 2]} - int{bg[2]}) > options.colorThreshold;
             }
             return pixels[base + 3] > options.alphaThreshold;
         };
@@ -847,14 +847,36 @@ namespace moth_packer {
             }
 
             if (!options.dryRun) {
-                // Copy the bounding-rect rows from the full sheet into a
-                // tightly-packed buffer, one row at a time.
                 std::vector<stbi_uc> spritePixels(static_cast<size_t>(r.w) * r.h * kChannels);
-                for (int row = 0; row < r.h; ++row) {
-                    auto const srcOff = (static_cast<size_t>(r.y + row) * width + r.x) * kChannels;
-                    auto const dstOff = static_cast<size_t>(row) * r.w * kChannels;
-                    std::memcpy(spritePixels.data() + dstOff, pixels + srcOff,
-                                static_cast<size_t>(r.w) * kChannels);
+                if (options.replaceBackgroundColor.has_value()) {
+                    // Per-pixel copy: replace background pixels with the replacement color.
+                    uint32_t const rep = options.replaceBackgroundColor.value();
+                    uint8_t const repR = static_cast<uint8_t>((rep >> 24) & 0xFF);
+                    uint8_t const repG = static_cast<uint8_t>((rep >> 16) & 0xFF);
+                    uint8_t const repB = static_cast<uint8_t>((rep >>  8) & 0xFF);
+                    uint8_t const repA = static_cast<uint8_t>( rep        & 0xFF);
+                    for (int row = 0; row < r.h; ++row) {
+                        for (int col = 0; col < r.w; ++col) {
+                            auto const srcOff = (static_cast<size_t>(r.y + row) * width + r.x + col) * kChannels;
+                            auto const dstOff = (static_cast<size_t>(row) * r.w + col) * kChannels;
+                            if (isActive(r.x + col, r.y + row)) {
+                                std::memcpy(spritePixels.data() + dstOff, pixels + srcOff, kChannels);
+                            } else {
+                                spritePixels[dstOff + 0] = repR;
+                                spritePixels[dstOff + 1] = repG;
+                                spritePixels[dstOff + 2] = repB;
+                                spritePixels[dstOff + 3] = repA;
+                            }
+                        }
+                    }
+                } else {
+                    // Fast path: copy the bounding-rect rows one at a time.
+                    for (int row = 0; row < r.h; ++row) {
+                        auto const srcOff = (static_cast<size_t>(r.y + row) * width + r.x) * kChannels;
+                        auto const dstOff = static_cast<size_t>(row) * r.w * kChannels;
+                        std::memcpy(spritePixels.data() + dstOff, pixels + srcOff,
+                                    static_cast<size_t>(r.w) * kChannels);
+                    }
                 }
 
                 auto const pathStr = outPath.string();
