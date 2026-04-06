@@ -101,12 +101,17 @@ Exactly one input source must be specified for `pack` and `flipbook` modes:
 | `--pretty` | off | Pretty-print the JSON descriptor with 4-space indentation |
 | `--absolute-paths` | off | Write absolute paths in the JSON descriptor instead of paths relative to the output directory |
 
+**Dimension bounds**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--min-dim <WxH>` | `256x256` (pack/flipbook) | pack/flipbook: minimum atlas dimensions. unpack: minimum sprite size to keep; smaller detected sprites are discarded |
+| `--max-dim <WxH>` | `4096x4096` (pack/flipbook) | pack: maximum atlas dimensions. flipbook: warn if atlas exceeds this size. unpack: maximum sprite size to keep; larger detected sprites are discarded |
+
 **Pack options**
 
 | Flag | Default | Description |
 |---|---|---|
-| `--min-dim <WxH>` | `256x256` | Minimum atlas dimensions |
-| `--max-dim <WxH>` | `4096x4096` | Maximum atlas dimensions |
 | `-p, --padding <n>` | `0` | Pixels of padding added around each image on all sides |
 | `--padding-type <type>` | `color` | Padding fill mode: `color`, `extend`, `mirror`, or `wrap` |
 | `--padding-color <RRGGBBAA>` | `00000000` | Atlas background color as 8 hex digits; fills the entire atlas before compositing |
@@ -125,7 +130,10 @@ Exactly one input source must be specified for `pack` and `flipbook` modes:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--alpha-threshold <n>` | `0` | Pixels with alpha above this value are treated as opaque (0–255) |
+| `--alpha-threshold <n>` | `0` | Pixels with alpha above this value are treated as opaque (0–255). Only used when no background colour is active. |
+| `--auto-bg` | off | Infer background colour by sampling the four corner pixels. Falls back to alpha detection if corners disagree. |
+| `--bg-colour <RRGGBB>` | — | Explicit background colour as a 6-digit hex value (e.g. `FF00FF`). Overrides `--auto-bg` and `--alpha-threshold`. |
+| `--colour-threshold <n>` | `10` | Per-channel tolerance when comparing pixels against the background colour (0–255). |
 
 ### Examples
 
@@ -167,6 +175,21 @@ moth_packer sheet.png --mode unpack -o sprites/
 Extract sprites ignoring near-transparent edge pixels (e.g. from JPEG compression):
 ```bash
 moth_packer sheet.png --mode unpack --alpha-threshold 10 -o sprites/
+```
+
+Extract sprites from a sheet with a uniform solid background (auto-detect colour from corners):
+```bash
+moth_packer sheet.png --mode unpack --auto-bg -o sprites/
+```
+
+Extract sprites from a sheet with a known magenta background:
+```bash
+moth_packer sheet.png --mode unpack --bg-colour FF00FF -o sprites/
+```
+
+Extract sprites, discarding stray-pixel noise smaller than 8×8:
+```bash
+moth_packer sheet.png --mode unpack --min-dim 8x8 -o sprites/
 ```
 
 Preview what would be packed without writing anything:

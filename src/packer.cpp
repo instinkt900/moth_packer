@@ -695,16 +695,65 @@ namespace moth_packer {
             return false;
         }
 
+        // Resolve which background colour to use for sprite detection.
+        // Priority: explicit backgroundColour > autoDetectBackground > alpha threshold.
+        std::optional<std::array<uint8_t, 3>> bgColour = options.backgroundColour;
+        if (!bgColour.has_value() && options.autoDetectBackground) {
+            // Sample the four corners. If they agree within colourThreshold on every
+            // channel, use their average as the background colour.
+            struct Corner { int x; int y; };
+            std::array<Corner, 4> const corners{{ {0, 0}, {width - 1, 0}, {0, height - 1}, {width - 1, height - 1} }};
+            std::array<std::array<uint8_t, 3>, 4> samples{};
+            for (size_t i = 0; i < corners.size(); ++i) {
+                size_t const base = (static_cast<size_t>(corners[i].y) * width + corners[i].x) * kChannels;
+                samples[i] = { pixels[base], pixels[base + 1], pixels[base + 2] };
+            }
+            bool cornersAgree = true;
+            for (int ch = 0; ch < 3 && cornersAgree; ++ch) {
+                uint8_t lo = samples[0][ch];
+                uint8_t hi = samples[0][ch];
+                for (size_t i = 1; i < samples.size(); ++i) {
+                    lo = std::min(lo, samples[i][ch]);
+                    hi = std::max(hi, samples[i][ch]);
+                }
+                if ((hi - lo) > options.colourThreshold) {
+                    cornersAgree = false;
+                }
+            }
+            if (cornersAgree) {
+                std::array<uint8_t, 3> avg{};
+                for (int ch = 0; ch < 3; ++ch) {
+                    int sum = 0;
+                    for (auto const& s : samples) { sum += s[ch]; }
+                    avg[ch] = static_cast<uint8_t>(sum / 4);
+                }
+                bgColour = avg;
+                spdlog::info("Auto-detected background colour: #{:02X}{:02X}{:02X}",
+                             avg[0], avg[1], avg[2]);
+            } else {
+                spdlog::warn("Corner pixels disagree; falling back to alpha-based detection");
+            }
+        }
+
         // Sprite detection uses a BFS flood fill over the pixel grid.
-        // A pixel is "active" if its alpha channel exceeds the threshold.
+        // A pixel is "active" (part of a sprite) when it is not background:
+        //   - colour mode: any RGB channel differs from bgColour by more than colourThreshold
+        //   - alpha mode:  alpha channel exceeds alphaThreshold
         // Each BFS seed finds one connected component (sprite), using
         // 8-connectivity so diagonally touching pixels belong to the same sprite.
         // The bounding rect of each component is recorded; pixels already
         // visited by a previous BFS are skipped so each sprite is found once.
         std::vector<bool> visited(static_cast<size_t>(width) * height, false);
 
-        auto isActive = [&](int x, int y) {
-            return pixels[((static_cast<size_t>(y) * width + x) * kChannels) + 3] > options.alphaThreshold;
+        auto isActive = [&](int x, int y) -> bool {
+            size_t const base = ((static_cast<size_t>(y) * width + x) * kChannels);
+            if (bgColour.has_value()) {
+                auto const& bg = bgColour.value();
+                return std::abs(int{pixels[base + 0]} - int{bg[0]}) > options.colourThreshold ||
+                       std::abs(int{pixels[base + 1]} - int{bg[1]}) > options.colourThreshold ||
+                       std::abs(int{pixels[base + 2]} - int{bg[2]}) > options.colourThreshold;
+            }
+            return pixels[base + 3] > options.alphaThreshold;
         };
 
         struct SpriteRect { int x, y, w, h; };
@@ -766,6 +815,24 @@ namespace moth_packer {
                      sprites.size(),
                      sprites.size() != 1 ? "s" : "",
                      sheetPath.filename().string());
+
+        // Filter by size bounds if specified (0 means no bound).
+        if (options.minSpriteWidth > 0 || options.minSpriteHeight > 0 ||
+            options.maxSpriteWidth > 0 || options.maxSpriteHeight > 0) {
+            size_t const before = sprites.size();
+            sprites.erase(std::remove_if(sprites.begin(), sprites.end(), [&](SpriteRect const& r) {
+                if (options.minSpriteWidth  > 0 && r.w < options.minSpriteWidth)  { return true; }
+                if (options.minSpriteHeight > 0 && r.h < options.minSpriteHeight) { return true; }
+                if (options.maxSpriteWidth  > 0 && r.w > options.maxSpriteWidth)  { return true; }
+                if (options.maxSpriteHeight > 0 && r.h > options.maxSpriteHeight) { return true; }
+                return false;
+            }), sprites.end());
+            size_t const filtered = before - sprites.size();
+            if (filtered > 0) {
+                spdlog::info("Filtered out {} sprite{} outside size bounds",
+                             filtered, filtered != 1 ? "s" : "");
+            }
+        }
 
         bool success = true;
         for (size_t i = 0; i < sprites.size(); ++i) {

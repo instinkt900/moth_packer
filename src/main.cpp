@@ -38,11 +38,16 @@ struct Args {
 
     std::pair<int, int> minDimensions{ 256, 256 };
     std::pair<int, int> maxDimensions{ 4096, 4096 };
+    bool minDimExplicit = false;
+    bool maxDimExplicit = false;
     int padding = 0;
     moth_packer::PaddingType paddingType = moth_packer::PaddingType::Color;
     uint32_t paddingColor = 0;
 
     int alphaThreshold = 0;
+    bool autoDetectBackground = false;
+    std::string backgroundColour;   // hex RRGGBB, empty = not set
+    int colourThreshold = 10;
 
     bool prettyJson = false;
     bool absolutePaths = false;
@@ -76,12 +81,39 @@ int RunUnpack(Args const& args) {
         return 1;
     }
     moth_packer::UnpackOptions opts;
-    opts.outputPath     = args.outputDir;
-    opts.alphaThreshold = static_cast<uint8_t>(args.alphaThreshold);
-    opts.forceOverwrite = args.forceOverwrite;
-    opts.dryRun         = args.dryRun;
-    opts.format         = args.atlasFormat;
-    opts.jpegQuality    = args.jpegQuality;
+    opts.outputPath          = args.outputDir;
+    opts.alphaThreshold      = static_cast<uint8_t>(args.alphaThreshold);
+    opts.forceOverwrite      = args.forceOverwrite;
+    opts.dryRun              = args.dryRun;
+    opts.format              = args.atlasFormat;
+    opts.jpegQuality         = args.jpegQuality;
+    opts.autoDetectBackground = args.autoDetectBackground;
+    opts.colourThreshold     = static_cast<uint8_t>(args.colourThreshold);
+    if (args.minDimExplicit) {
+        opts.minSpriteWidth  = args.minDimensions.first;
+        opts.minSpriteHeight = args.minDimensions.second;
+    }
+    if (args.maxDimExplicit) {
+        opts.maxSpriteWidth  = args.maxDimensions.first;
+        opts.maxSpriteHeight = args.maxDimensions.second;
+    }
+    if (!args.backgroundColour.empty()) {
+        if (args.backgroundColour.size() != 6) {
+            spdlog::error("--bg-colour must be a 6-digit hex value (e.g. FF00FF)");
+            return 1;
+        }
+        try {
+            unsigned long const rgb = std::stoul(args.backgroundColour, nullptr, 16);
+            opts.backgroundColour = std::array<uint8_t, 3>{
+                static_cast<uint8_t>((rgb >> 16) & 0xFF),
+                static_cast<uint8_t>((rgb >>  8) & 0xFF),
+                static_cast<uint8_t>( rgb        & 0xFF),
+            };
+        } catch (std::exception const&) {
+            spdlog::error("--bg-colour value '{}' is not a valid hex value", args.backgroundColour);
+            return 1;
+        }
+    }
     return moth_packer::Unpack(args.path, opts) ? 0 : 1;
 }
 
@@ -234,22 +266,24 @@ int main(int argc, char* argv[]) {
     outputGroup->add_flag("--absolute-paths", args.absolutePaths, "Write absolute paths in the output JSON.")
         ->default_val(false);
 
+    // --- Dimension bounds (all modes) ---
+    auto* optionMinDim =
+        app.add_option("--min-dim", args.minDimensions,
+                       fmt::format("pack/flipbook: minimum atlas dimensions WxH (default: {}x{}). "
+                                   "unpack: minimum sprite size to keep; smaller sprites are discarded (default: no limit).",
+                                   args.minDimensions.first, args.minDimensions.second))
+            ->delimiter('x');
+
+    auto* optionMaxDim =
+        app.add_option("--max-dim", args.maxDimensions,
+                       fmt::format("pack: maximum atlas dimensions WxH (default: {}x{}). "
+                                   "flipbook: warn if atlas exceeds this size. "
+                                   "unpack: maximum sprite size to keep; larger sprites are discarded (default: no limit).",
+                                   args.maxDimensions.first, args.maxDimensions.second))
+            ->delimiter('x');
+
     // --- Pack options ---
     auto* packGroup = app.add_option_group("pack options");
-
-    packGroup->add_option("--min-dim",
-                          args.minDimensions,
-                          fmt::format("Minimum atlas dimensions WxH (default: {}x{}).",
-                                      args.minDimensions.first,
-                                      args.minDimensions.second))
-        ->delimiter('x');
-
-    packGroup->add_option("--max-dim",
-                              args.maxDimensions,
-                              fmt::format("Maximum atlas dimensions WxH (default: {}x{}).",
-                                          args.maxDimensions.first,
-                                          args.maxDimensions.second))
-            ->delimiter('x');
 
     packGroup->add_option("-p,--padding", args.padding, "Pixels of padding around each image.")
         ->default_val(0);
@@ -295,7 +329,20 @@ int main(int argc, char* argv[]) {
     auto* unpackGroup = app.add_option_group("unpack options");
 
     unpackGroup->add_option("--alpha-threshold", args.alphaThreshold,
-                            "Pixels with alpha above this value are treated as opaque (0-255, default: 0).")
+                            "Pixels with alpha above this value are treated as opaque (0-255, default: 0). "
+                            "Only used when no background colour is active.")
+        ->check(CLI::Range(0, 255));
+
+    unpackGroup->add_flag("--auto-bg", args.autoDetectBackground,
+                          "Auto-detect background colour by sampling the four corners of the sheet. "
+                          "Falls back to alpha-based detection if the corners disagree.");
+
+    unpackGroup->add_option("--bg-colour", args.backgroundColour,
+                            "Explicit background colour as a 6-digit hex value (e.g. FF00FF). "
+                            "Overrides --auto-bg and --alpha-threshold.");
+
+    unpackGroup->add_option("--colour-threshold", args.colourThreshold,
+                            "Per-channel tolerance when comparing pixels against the background colour (0-255, default: 10).")
         ->check(CLI::Range(0, 255));
 
     if (argc == 1) {
@@ -312,6 +359,9 @@ int main(int argc, char* argv[]) {
     } else {
         spdlog::set_level(spdlog::level::warn);
     }
+
+    args.minDimExplicit = (optionMinDim->count() != 0);
+    args.maxDimExplicit = (optionMaxDim->count() != 0);
 
     if (optionFile->count() != 0)      { args.inputSource = InputSource::File; }
     else if (optionDir->count() != 0)  { args.inputSource = InputSource::Dir; }

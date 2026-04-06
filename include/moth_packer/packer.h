@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
+#include <optional>
 #include <moth_ui/moth_ui.h>
 
 namespace moth_packer {
@@ -126,18 +128,42 @@ namespace moth_packer {
     struct UnpackOptions {
         std::filesystem::path outputPath;       ///< Directory where extracted sprites are written.
         std::string spritePrefix = "sprite";    ///< Filename prefix for extracted sprite files (e.g. "sprite" → sprite_0.png).
-        uint8_t alphaThreshold = 0;             ///< Pixels with alpha strictly greater than this are treated as non-transparent.
+        uint8_t alphaThreshold = 0;             ///< Pixels with alpha strictly greater than this are treated as non-transparent. Only used when no background colour is active.
         bool forceOverwrite = false;            ///< Overwrite existing sprite files without error.
         bool dryRun = false;                    ///< Detect sprites and report but do not write any files.
         AtlasFormat format = AtlasFormat::PNG;  ///< Output image format for extracted sprites.
         int jpegQuality = 90;                   ///< JPEG encode quality (1–100). Only used when format is AtlasFormat::JPEG.
+
+        /// Explicit background colour (RGB). When set, a pixel is considered background when all
+        /// three channels are within colourThreshold of this colour. Takes precedence over
+        /// alphaThreshold and autoDetectBackground.
+        std::optional<std::array<uint8_t, 3>> backgroundColour;
+
+        /// When true and backgroundColour is not set, the background colour is inferred by sampling
+        /// the four corner pixels of the sheet. Falls back to alpha-based detection if the corners
+        /// differ by more than colourThreshold on any channel.
+        bool autoDetectBackground = false;
+
+        /// Per-channel tolerance used when comparing pixels against the background colour (0–255).
+        uint8_t colourThreshold = 10;
+
+        int minSpriteWidth = 0;   ///< Minimum sprite width  to keep (0 = no minimum).
+        int minSpriteHeight = 0;  ///< Minimum sprite height to keep (0 = no minimum).
+        int maxSpriteWidth = 0;   ///< Maximum sprite width  to keep (0 = no maximum).
+        int maxSpriteHeight = 0;  ///< Maximum sprite height to keep (0 = no maximum).
     };
 
-    /// @brief Extract individual sprites from a sprite sheet by detecting connected non-transparent regions.
+    /// @brief Extract individual sprites from a sprite sheet by detecting connected non-background regions.
     ///
-    /// Scans the sheet for pixels with alpha > UnpackOptions::alphaThreshold, groups connected pixels
-    /// (8-connectivity) into components, and saves the bounding rect of each component as a
-    /// separate image file named `<spritePrefix>_N.<ext>`.
+    /// A pixel is "active" (part of a sprite) based on the active detection mode:
+    /// - If backgroundColour is set: pixel is active when any RGB channel differs from the
+    ///   background by more than colourThreshold.
+    /// - If autoDetectBackground is true: background colour is inferred from the four corner pixels
+    ///   (falls back to alpha if corners disagree).
+    /// - Otherwise: pixel is active when alpha > alphaThreshold.
+    ///
+    /// Active pixels are grouped via BFS (8-connectivity) into connected components; the bounding
+    /// rect of each component is saved as `<spritePrefix>_N.<ext>`.
     ///
     /// @param sheetPath Path to the source sprite sheet image.
     /// @param options   Extraction configuration.
