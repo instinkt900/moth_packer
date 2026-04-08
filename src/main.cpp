@@ -9,7 +9,6 @@
 enum class Mode {
     Pack,
     Unpack,
-    Flipbook,
 };
 
 enum class InputSource {
@@ -58,10 +57,10 @@ struct Args {
 
     bool dryRun = false;
 
+    moth_packer::PackType packType = moth_packer::PackType::Atlas;
     int fps = 12;
     moth_packer::LoopType loop = moth_packer::LoopType::Loop;
-    std::pair<int, int> frameSize{ 0, 0 };
-    bool strict = false;
+    std::string clipName = "default";
 };
 
 static bool CollectImages(Args const& args, std::vector<moth_packer::ImageDetails>& images) {
@@ -131,41 +130,6 @@ int RunUnpack(Args const& args) {
     return moth_packer::Unpack(args.path, opts) ? 0 : 1;
 }
 
-int RunFlipbook(Args const& args) {
-    if (args.path.empty()) {
-        spdlog::error("output name is required for flipbook mode");
-        return 1;
-    }
-    if (args.inputSource == InputSource::None) {
-        spdlog::error("an input source is required for flipbook mode");
-        return 1;
-    }
-    std::vector<moth_packer::ImageDetails> images;
-    CollectImages(args, images);
-    if (images.empty()) {
-        spdlog::error("No images found!");
-        return 1;
-    }
-    moth_packer::FlipbookOptions opts;
-    opts.outputPath    = args.outputDir;
-    opts.filename      = args.path;
-    opts.forceOverwrite = args.forceOverwrite;
-    opts.dryRun        = args.dryRun;
-    opts.prettyJson    = args.prettyJson;
-    opts.absolutePaths = args.absolutePaths;
-    opts.format        = args.atlasFormat;
-    opts.jpegQuality   = args.jpegQuality;
-    opts.fps           = args.fps;
-    opts.loop          = args.loop;
-    opts.frameWidth    = args.frameSize.first;
-    opts.frameHeight   = args.frameSize.second;
-    opts.strict         = args.strict;
-    opts.maxAtlasWidth  = args.maxDimensions.first;
-    opts.maxAtlasHeight = args.maxDimensions.second;
-    opts.paddingColor   = args.paddingColor;
-    return moth_packer::Flipbook(std::move(images), opts) ? 0 : 1;
-}
-
 int RunPack(Args const& args) {
     if (args.path.empty()) {
         spdlog::error("output name is required for pack mode");
@@ -197,6 +161,10 @@ int RunPack(Args const& args) {
     opts.absolutePaths = args.absolutePaths;
     opts.format        = args.atlasFormat;
     opts.jpegQuality   = args.jpegQuality;
+    opts.packType      = args.packType;
+    opts.fps           = args.fps;
+    opts.loop          = args.loop;
+    opts.clipName      = args.clipName;
     return moth_packer::Pack(std::move(images), opts) ? 0 : 1;
 }
 
@@ -212,13 +180,12 @@ int main(int argc, char* argv[]) {
 
     // --- General ---
     app.add_option("path", args.path,
-                   "Output name for pack/flipbook modes (no extension), or input sheet path for unpack mode.");
+                   "Output name for pack mode (no extension), or input sheet path for unpack mode.");
 
-    app.add_option("--mode", args.mode, "Operating mode: pack (default), unpack, flipbook.")
+    app.add_option("--mode", args.mode, "Operating mode: pack (default), unpack.")
         ->transform(CLI::CheckedTransformer(
             std::map<std::string, Mode>{ { "pack", Mode::Pack },
-                                         { "unpack", Mode::Unpack },
-                                         { "flipbook", Mode::Flipbook } }));
+                                         { "unpack", Mode::Unpack } }));
 
     app.add_option("-o,--out", args.outputDir, "Path to directory where output files will be written.")
         ->default_val(".");
@@ -238,8 +205,8 @@ int main(int argc, char* argv[]) {
         ->default_val(false)
         ->excludes(flagVerbose);
 
-    // --- Input source (pack and flipbook) ---
-    auto* inputGroup = app.add_option_group("input source (required for pack and flipbook modes)");
+    // --- Input source (pack mode) ---
+    auto* inputGroup = app.add_option_group("input source (required for pack mode)");
     inputGroup->require_option(0, 1);
 
     auto* optionFile =
@@ -284,7 +251,7 @@ int main(int argc, char* argv[]) {
     // --- Dimension bounds (all modes) ---
     auto* optionMinDim =
         app.add_option("--min-dim", args.minDimensions,
-                       fmt::format("pack/flipbook: minimum atlas dimensions WxH (default: {}x{}). "
+                       fmt::format("pack: minimum atlas dimensions WxH (default: {}x{}). "
                                    "unpack: minimum sprite size to keep; smaller sprites are discarded (default: no limit).",
                                    args.minDimensions.first, args.minDimensions.second))
             ->delimiter('x');
@@ -292,13 +259,20 @@ int main(int argc, char* argv[]) {
     auto* optionMaxDim =
         app.add_option("--max-dim", args.maxDimensions,
                        fmt::format("pack: maximum atlas dimensions WxH (default: {}x{}). "
-                                   "flipbook: warn if atlas exceeds this size. "
                                    "unpack: maximum sprite size to keep; larger sprites are discarded (default: no limit).",
                                    args.maxDimensions.first, args.maxDimensions.second))
             ->delimiter('x');
 
     // --- Pack options ---
     auto* packGroup = app.add_option_group("pack options");
+
+    packGroup->add_option("--pack-type", args.packType,
+                          "Output type for pack mode: atlas (default) or flipbook. "
+                          "atlas writes a multi-atlas JSON descriptor. "
+                          "flipbook writes a single-atlas .flipbook.json with per-frame rects and a clip sequence.")
+        ->transform(CLI::CheckedTransformer(
+            std::map<std::string, moth_packer::PackType>{ { "atlas",    moth_packer::PackType::Atlas },
+                                                          { "flipbook", moth_packer::PackType::Flipbook } }));
 
     packGroup->add_option("-p,--padding", args.padding, "Pixels of padding around each image.")
         ->default_val(0);
@@ -310,7 +284,7 @@ int main(int argc, char* argv[]) {
                                                              { "mirror", moth_packer::PaddingType::Mirror },
                                                              { "wrap", moth_packer::PaddingType::Wrap } }));
 
-    packGroup->add_option("--padding-color", args.paddingColor, "Padding fill color as RRGGBBAA hex.")
+    packGroup->add_option("--padding-color", args.paddingColor, "Atlas background fill color as RRGGBBAA hex.")
         ->transform([](std::string const& val) -> std::string {
             if (val.size() != 8 || val.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
                 throw CLI::ValidationError("--padding-color", "must be exactly 8 hex digits");
@@ -318,27 +292,19 @@ int main(int argc, char* argv[]) {
             return std::to_string(std::stoul(val, nullptr, 16));
         });
 
-    // --- Flipbook options ---
-    auto* flipbookGroup = app.add_option_group("flipbook options");
-
-    flipbookGroup->add_option("--frame-size", args.frameSize,
-                              "Fixed frame cell size as WxH. Defaults to the largest input image dimensions.")
-        ->delimiter('x')
-        ->check(CLI::PositiveNumber);
-
-    flipbookGroup->add_option("--fps", args.fps,
-                              "Frames per second for the default clip (default: 12).")
+    packGroup->add_option("--fps", args.fps,
+                          "Frames per second for the auto-generated clip (default: 12, flipbook only).")
         ->check(CLI::Range(1, 1000));
 
-    flipbookGroup->add_option("--loop", args.loop, "Loop behavior for the default clip (default: loop).")
+    packGroup->add_option("--loop", args.loop,
+                          "Loop behavior for the auto-generated clip (default: loop, flipbook only).")
         ->transform(CLI::CheckedTransformer(
-            std::map<std::string, moth_packer::LoopType>{ { "loop", moth_packer::LoopType::Loop },
-                                                          { "stop", moth_packer::LoopType::Stop },
+            std::map<std::string, moth_packer::LoopType>{ { "loop",  moth_packer::LoopType::Loop },
+                                                          { "stop",  moth_packer::LoopType::Stop },
                                                           { "reset", moth_packer::LoopType::Reset } }));
 
-    flipbookGroup->add_flag("--strict", args.strict,
-                            "Treat frame size and atlas size violations as errors rather than warnings.")
-        ->default_val(false);
+    packGroup->add_option("--clip-name", args.clipName,
+                          "Name for the auto-generated clip (default: \"default\", flipbook only).");
 
     // --- Unpack options ---
     auto* unpackGroup = app.add_option_group("unpack options");
@@ -390,9 +356,8 @@ int main(int argc, char* argv[]) {
     else if (optionGlob->count() != 0) { args.inputSource = InputSource::Glob; }
 
     switch (args.mode) {
-    case Mode::Pack:     return RunPack(args);
-    case Mode::Unpack:   return RunUnpack(args);
-    case Mode::Flipbook: return RunFlipbook(args);
+    case Mode::Pack:   return RunPack(args);
+    case Mode::Unpack: return RunUnpack(args);
     default:
         spdlog::error("Unhandled mode");
         return 1;
