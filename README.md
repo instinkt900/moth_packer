@@ -302,18 +302,18 @@ cmake --build --preset conan-release
 
 ### CLI mode
 
-Pass `-o moth_packer:build_cli=True` to build the `moth_packer` executable alongside the library.
+Pass `-o moth_packer/*:build_cli=True` to build the `moth_packer` executable alongside the library.
 
 **Linux:**
 ```bash
-conan install . -pr .conan/profile -o moth_packer:build_cli=True -s build_type=Release --build=missing
+conan install . -pr .conan/profile -o moth_packer/*:build_cli=True -s build_type=Release --build=missing
 cmake --preset conan-release
 cmake --build --preset conan-release
 ```
 
 **Windows:**
 ```bash
-conan install . -pr .conan/profile -o moth_packer:build_cli=True -s build_type=Release --build=missing
+conan install . -pr .conan/profile -o moth_packer/*:build_cli=True -s build_type=Release --build=missing
 cmake --preset conan-default
 cmake --build --preset conan-release
 ```

@@ -8,11 +8,20 @@
 
 namespace moth_packer {
 
-    /// Metadata for a single image to be packed.
+    /// Metadata for a single image to be packed from a file path.
     struct ImageDetails {
         std::filesystem::path path;
         moth_ui::IntVec2 dimensions;
         int channels = 0;
+    };
+
+    /// A single image to be packed, supplied as raw pixel data.
+    /// Use with PackToMemory() when images are already resident in memory.
+    struct ImageInput {
+        std::string name;              ///< Logical name used in the output descriptor (e.g. a filename stem or asset key).
+        int width = 0;                 ///< Image width in pixels.
+        int height = 0;                ///< Image height in pixels.
+        std::vector<uint8_t> pixels;   ///< Raw RGBA pixel data, exactly width * height * 4 bytes.
     };
 
     /// Output image format for atlas files.
@@ -42,6 +51,47 @@ namespace moth_packer {
     enum class PackType {
         Atlas,    ///< Standard texture atlas: multi-atlas JSON with image path/rect entries.
         Flipbook, ///< Flipbook: single-atlas JSON with a frames array and named clip sequences.
+    };
+
+    /// A single image placed in an atlas, returned by PackToMemory().
+    struct PackedImage {
+        std::string name;         ///< The logical name from ImageInput::name.
+        moth_ui::IntRect rect;    ///< Pixel rect within the atlas (excludes padding).
+    };
+
+    /// A single atlas produced by PackToMemory().
+    /// In atlas mode there may be more than one. In flipbook mode there is exactly one.
+    struct PackedAtlas {
+        int width = 0;                    ///< Atlas width in pixels.
+        int height = 0;                   ///< Atlas height in pixels.
+        std::vector<uint8_t> pixels;      ///< Raw RGBA pixel data, width * height * 4 bytes.
+        std::vector<PackedImage> images;  ///< Images packed into this atlas (atlas mode). Empty in flipbook mode.
+    };
+
+    /// Per-frame pixel rect and pivot for a flipbook result.
+    struct PackedFrame {
+        moth_ui::IntRect rect;   ///< Pixel rect within the atlas (excludes padding).
+        moth_ui::IntVec2 pivot;  ///< Frame pivot point in pixels (zero for auto-generated flipbooks).
+    };
+
+    /// A single step (frame reference + duration) within a flipbook clip.
+    struct PackedClipStep {
+        int frameIndex = 0;  ///< Index into PackResult::frames.
+        int durationMs = 0;  ///< Duration of this step in milliseconds.
+    };
+
+    /// A named clip sequence in a flipbook result.
+    struct PackedClip {
+        std::string name;
+        LoopType loop = LoopType::Loop;
+        std::vector<PackedClipStep> steps;
+    };
+
+    /// Result returned by PackToMemory(). A non-empty atlases vector indicates success.
+    struct PackResult {
+        std::vector<PackedAtlas> atlases; ///< One or more atlases (atlas mode); exactly one (flipbook mode).
+        std::vector<PackedFrame> frames;  ///< Per-frame rects/pivots (flipbook mode only; empty for atlas mode).
+        std::vector<PackedClip>  clips;   ///< Named clips (flipbook mode only; empty for atlas mode).
     };
 
     /// @brief Collect images from a text file containing one image path per line.
@@ -109,7 +159,35 @@ namespace moth_packer {
         std::string clipName = "default";      ///< Name of the auto-generated clip.
     };
 
+    /// @brief Pack images into one or more atlases (or a single flipbook atlas) entirely in memory.
+    ///
+    /// This is the core packing function. Pack(ImageDetails, PackOptions) is a convenience wrapper
+    /// that loads images from disk, calls PackToMemory, then writes the resulting pixels and JSON
+    /// descriptor to the output directory.
+    ///
+    /// When `options.packType == PackType::Atlas`:
+    ///   Images are bin-packed into the smallest power-of-two atlas that achieves the best area
+    ///   utilisation. Multiple atlases are produced if needed. Each atlas in the result contains
+    ///   the composited pixel data and a list of packed images with their rects.
+    ///
+    /// When `options.packType == PackType::Flipbook`:
+    ///   Images are sorted alphabetically by name and bin-packed into a single atlas. The result
+    ///   contains one atlas, a `frames` array with per-frame rects and pivots, and a `clips` array
+    ///   with a single auto-generated clip covering all frames in order. Returns an empty result if
+    ///   not all images fit into one atlas — increase `maxWidth`/`maxHeight` in that case.
+    ///
+    /// `options.outputPath` and `options.filename` are not used by this function.
+    ///
+    /// @param images  Images to pack. Each must have a valid name, positive dimensions, and a
+    ///                pixels vector of exactly `width * height * 4` bytes (RGBA).
+    /// @param options Packing configuration.
+    /// @return A PackResult whose atlases vector is non-empty on success; empty on failure.
+    PackResult PackToMemory(std::vector<ImageInput> images, PackOptions const& options);
+
     /// @brief Pack images into one or more texture atlases, or a single flipbook atlas.
+    ///
+    /// Loads images from disk, calls PackToMemory, then writes the resulting atlas images
+    /// and JSON descriptor to `options.outputPath`.
     ///
     /// When `options.packType == PackType::Atlas`:
     ///   Images are sorted into the smallest power-of-two atlas that achieves the best area
@@ -127,29 +205,7 @@ namespace moth_packer {
     /// @param options Packing configuration.
     /// @return True on success. False on fatal errors such as an empty image list, invalid options,
     ///         a load/write failure, or (flipbook only) images that do not fit in a single atlas.
-    bool Pack(std::vector<ImageDetails> images, PackOptions const& options);
-
-    /// @deprecated Use Pack(images, PackOptions) instead. This overload will be removed in a future version.
-    inline bool Pack(std::vector<ImageDetails> images,
-                     std::filesystem::path outputPath,
-                     std::string filename,
-                     bool forceOverwrite = false,
-                     bool dryRun = false,
-                     int minWidth = 256,
-                     int minHeight = 256,
-                     int maxWidth = 4096,
-                     int maxHeight = 4096) {
-        PackOptions opts;
-        opts.outputPath    = std::move(outputPath);
-        opts.filename      = std::move(filename);
-        opts.forceOverwrite = forceOverwrite;
-        opts.dryRun        = dryRun;
-        opts.minWidth      = minWidth;
-        opts.minHeight     = minHeight;
-        opts.maxWidth      = maxWidth;
-        opts.maxHeight     = maxHeight;
-        return Pack(std::move(images), opts);
-    }
+    bool Pack(std::vector<ImageDetails> imageDetails, PackOptions const& options);
 
     /// Options controlling sprite extraction from a sheet image.
     struct UnpackOptions {
