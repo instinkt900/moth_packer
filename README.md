@@ -4,7 +4,7 @@
 [![Release](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml/badge.svg)](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_ui) layouts. Available as both a **C++ library** (for embedding packing into your own tools) and a **command-line tool**. Three operating modes: **pack** images into a bin-packed atlas, **flipbook** images into a uniform-grid animation sheet, or **unpack** a sprite sheet back into individual images. Outputs JSON descriptors alongside one or more atlas images (PNG, BMP, TGA, or JPEG).
+A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_ui) layouts. Available as both a **C++ library** (for embedding packing into your own tools) and a **command-line tool**. Two operating modes: **pack** images into a bin-packed atlas (standard or flipbook), or **unpack** a sprite sheet back into individual images. Outputs JSON descriptors alongside one or more atlas images (PNG, BMP, TGA, or JPEG).
 
 ---
 
@@ -29,13 +29,13 @@ A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_u
 
 ## Features
 
-**Three modes** — `pack` bins images into the smallest power-of-two atlas (or multiple atlases), `flipbook` lays images out in order on a uniform grid for frame animation, and `unpack` extracts sprites from a sheet by detecting non-transparent regions.
+**Two modes** — `pack` bins images into one or more power-of-two atlases (pass `--pack-type flipbook` for a single bin-packed atlas with per-frame rects and a named clip sequence), and `unpack` extracts sprites from a sheet by detecting non-transparent regions.
 
 **Multiple input sources** — point moth_packer at a directory of images, a glob pattern, a plain text file listing image paths, a single moth_ui layout file, or a directory of layout files. Recursive directory traversal is supported for all directory-based sources.
 
 **Automatic atlas sizing** — the packer tests power-of-two atlas dimensions between configurable min and max sizes and picks the most space-efficient fit. When images don't all fit in one atlas, additional atlases are created automatically.
 
-**Single JSON descriptor** — all atlases produced in one run are described in a single `.json` file, making it straightforward to load an entire pack at runtime without enumerating files. Flipbook mode also writes a `.flipbook.json` descriptor with frame grid metadata and clip information.
+**Single JSON descriptor** — all atlases produced in one run are described in a single `.json` file, making it straightforward to load an entire pack at runtime without enumerating files. Flipbook output (`--pack-type flipbook`) writes a `.flipbook.json` descriptor with per-frame rects, pivots, and named clip sequences.
 
 **Configurable padding** — add a pixel border around each image with four fill modes: solid color (`color`), clamp-to-edge (`extend`), mirrored reflection (`mirror`), or tiling wrap (`wrap`).
 
@@ -55,19 +55,18 @@ AI agents (primarily Claude) are used as tools in this project for tasks such as
 moth_packer <path> [options]
 ```
 
-In **pack** and **flipbook** modes, `<path>` is the base name for the output (no extension). The packer writes `<path>.json` and `<path>_0.<ext>`, `<path>_1.<ext>`, … to the output directory. In **unpack** mode, `<path>` is the input sprite sheet to extract from.
+In **pack** mode, `<path>` is the base name for the output (no extension). For atlas packing (default) the packer writes `<path>.json` and `<path>_0.<ext>`, `<path>_1.<ext>`, … to the output directory. For flipbook packing (`--pack-type flipbook`) it writes `<path>.flipbook.json` and `<path>.<ext>` (a single atlas image). In **unpack** mode, `<path>` is the input sprite sheet to extract from.
 
 ### Modes
 
 | `--mode` | Description |
 |---|---|
-| `pack` *(default)* | Bin-pack images into one or more power-of-two atlases |
-| `flipbook` | Lay images out in alphabetical order on a uniform grid for frame animation |
+| `pack` *(default)* | Bin-pack images into one or more power-of-two atlases. Pass `--pack-type flipbook` for a single bin-packed atlas with per-frame rects and a named clip. |
 | `unpack` | Extract individual sprites from a sprite sheet by detecting non-transparent regions |
 
 ### Input sources
 
-Exactly one input source must be specified for `pack` and `flipbook` modes:
+Exactly one input source must be specified for pack mode:
 
 | Flag | Description |
 |---|---|
@@ -83,7 +82,7 @@ Exactly one input source must be specified for `pack` and `flipbook` modes:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--mode <mode>` | `pack` | Operating mode: `pack`, `unpack`, or `flipbook` |
+| `--mode <mode>` | `pack` | Operating mode: `pack` or `unpack` |
 | `-o, --out <path>` | `.` | Directory to write output files into |
 | `-r, --recursive` | off | Recurse into subdirectories (directory input sources only) |
 | `-f, --force` | off | Overwrite existing output files and allow packing to succeed with zero atlases (when all images are oversized) |
@@ -105,27 +104,25 @@ Exactly one input source must be specified for `pack` and `flipbook` modes:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--min-dim <WxH>` | `256x256` (pack/flipbook) | pack/flipbook: minimum atlas dimensions. unpack: minimum sprite size to keep; smaller detected sprites are discarded |
-| `--max-dim <WxH>` | `4096x4096` (pack/flipbook) | pack: maximum atlas dimensions. flipbook: warn if atlas exceeds this size. unpack: maximum sprite size to keep; larger detected sprites are discarded |
+| `--min-dim <WxH>` | `256x256` (pack) | pack: minimum atlas dimensions. unpack: minimum sprite size to keep; smaller detected sprites are discarded |
+| `--max-dim <WxH>` | `4096x4096` (pack) | pack: maximum atlas dimensions. unpack: maximum sprite size to keep; larger detected sprites are discarded |
 
 **Pack options**
 
 | Flag | Default | Description |
 |---|---|---|
+| `--pack-type <type>` | `atlas` | Output type: `atlas` (multi-atlas JSON) or `flipbook` (single-atlas `.flipbook.json` with per-frame rects and a clip sequence) |
 | `-p, --padding <n>` | `0` | Pixels of padding added around each image on all sides |
 | `--padding-type <type>` | `color` | Padding fill mode: `color`, `extend`, `mirror`, or `wrap` |
 | `--padding-color <RRGGBBAA>` | `00000000` | Atlas background color as 8 hex digits; fills the entire atlas before compositing |
 
-**Flipbook options**
+**Flipbook options** *(only used when `--pack-type flipbook`)*
 
 | Flag | Default | Description |
 |---|---|---|
-| `--frame-size <WxH>` | *(largest input image)* | Fixed frame cell size; input images are centered and cropped to fit |
-| `--fps <n>` | `12` | Frames per second for the default clip |
+| `--fps <n>` | `12` | Frames per second for the auto-generated clip |
 | `--loop <type>` | `loop` | Loop behavior: `loop`, `stop`, or `reset` |
-| `--max-dim <WxH>` | `4096x4096` | Warn (or error with `--strict`) if the atlas exceeds these dimensions |
-| `--strict` | off | Treat frame size and atlas size violations as errors instead of warnings |
-| `--padding-color <RRGGBBAA>` | `00000000` | Atlas background fill color as 8 hex digits; applied to every pixel before frames are composited |
+| `--clip-name <name>` | `default` | Name for the auto-generated clip |
 
 **Unpack options**
 
@@ -166,7 +163,7 @@ moth_packer ui -d assets/images -p 2 --padding-type extend --pretty -o build/atl
 
 Build a flipbook animation sheet from a directory of frames:
 ```bash
-moth_packer explosion --mode flipbook -d assets/explosion --frame-size 64x64 --fps 24 -o build/atlases
+moth_packer explosion --pack-type flipbook -d assets/explosion --fps 24 -o build/atlases
 ```
 
 Extract sprites from a sprite sheet (transparent background):
@@ -236,29 +233,31 @@ Paths are relative to the output directory by default. Pass `--absolute-paths` t
 
 ### Flipbook
 
-A flipbook run produces `<name>_0.<ext>` (the atlas image) and `<name>.flipbook.json`. The descriptor describes the frame grid and the default animation clip:
+A flipbook run produces `<name>.<ext>` (the atlas image) and `<name>.flipbook.json`. The descriptor lists each packed frame with its pixel rect and pivot, and a named clip sequence:
 
 ```json
 {
-  "image": "explosion_0.png",
-  "frame_width": 64,
-  "frame_height": 64,
-  "frame_cols": 4,
-  "frame_rows": 3,
-  "max_frames": 12,
+  "image": "explosion.png",
+  "frames": [
+    { "x": 0,   "y": 0, "w": 64, "h": 64, "pivot_x": 0, "pivot_y": 0 },
+    { "x": 64,  "y": 0, "w": 64, "h": 64, "pivot_x": 0, "pivot_y": 0 },
+    { "x": 128, "y": 0, "w": 64, "h": 64, "pivot_x": 0, "pivot_y": 0 }
+  ],
   "clips": [
     {
       "name": "default",
-      "start": 0,
-      "end": 11,
-      "fps": 24,
-      "loop": "loop"
+      "loop": "loop",
+      "frames": [
+        { "frame": 0, "duration_ms": 42 },
+        { "frame": 1, "duration_ms": 41 },
+        { "frame": 2, "duration_ms": 42 }
+      ]
     }
   ]
 }
 ```
 
-`loop` is one of `loop`, `stop`, or `reset`.
+`loop` is one of `loop`, `stop`, or `reset`. Frame durations sum to `round(frameCount * 1000 / fps)` ms.
 
 ---
 
@@ -302,18 +301,18 @@ cmake --build --preset conan-release
 
 ### CLI mode
 
-Pass `-o moth_packer:build_cli=True` to build the `moth_packer` executable alongside the library.
+Pass `-o moth_packer/*:build_cli=True` to build the `moth_packer` executable alongside the library.
 
 **Linux:**
 ```bash
-conan install . -pr .conan/profile -o moth_packer:build_cli=True -s build_type=Release --build=missing
+conan install . -pr .conan/profile -o moth_packer/*:build_cli=True -s build_type=Release --build=missing
 cmake --preset conan-release
 cmake --build --preset conan-release
 ```
 
 **Windows:**
 ```bash
-conan install . -pr .conan/profile -o moth_packer:build_cli=True -s build_type=Release --build=missing
+conan install . -pr .conan/profile -o moth_packer/*:build_cli=True -s build_type=Release --build=missing
 cmake --preset conan-default
 cmake --build --preset conan-release
 ```

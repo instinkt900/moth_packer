@@ -1,17 +1,29 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string>
+#include <vector>
 #include <moth_ui/moth_ui.h>
 
 namespace moth_packer {
 
-    /// Metadata for a single image to be packed.
+    /// Metadata for a single image to be packed from a file path.
     struct ImageDetails {
         std::filesystem::path path;
         moth_ui::IntVec2 dimensions;
         int channels = 0;
+    };
+
+    /// A single image to be packed, supplied as raw pixel data.
+    /// Use with PackToMemory() when images are already resident in memory.
+    struct ImageInput {
+        std::string name;              ///< Logical name used in the output descriptor (e.g. a filename stem or asset key).
+        int width = 0;                 ///< Image width in pixels.
+        int height = 0;                ///< Image height in pixels.
+        std::vector<uint8_t> pixels;   ///< Raw RGBA pixel data, exactly width * height * 4 bytes.
     };
 
     /// Output image format for atlas files.
@@ -28,6 +40,63 @@ namespace moth_packer {
         Extend, ///< Repeat the nearest edge pixel outward.
         Mirror, ///< Reflect pixels across each edge.
         Wrap,   ///< Tile pixels from the opposite edge.
+    };
+
+    /// Loop behavior for a flipbook clip.
+    enum class LoopType {
+        Loop,   ///< Jump back to the first frame and keep playing indefinitely.
+        Stop,   ///< Freeze on the last frame and fire EventFlipbookStopped.
+        Reset,  ///< Rewind to the first frame, freeze, and fire EventFlipbookStopped.
+    };
+
+    /// Output type for the pack operation.
+    enum class PackType {
+        Atlas,    ///< Standard texture atlas: multi-atlas JSON with image path/rect entries.
+        Flipbook, ///< Flipbook: single-atlas JSON with a frames array and named clip sequences.
+    };
+
+    /// A single image placed in an atlas, returned by PackToMemory().
+    struct PackedImage {
+        std::string name;         ///< The logical name from ImageInput::name.
+        moth_ui::IntRect rect;    ///< Pixel rect within the atlas (excludes padding).
+    };
+
+    /// A single atlas produced by PackToMemory().
+    /// In atlas mode there may be more than one. In flipbook mode there is exactly one.
+    struct PackedAtlas {
+        int width = 0;                    ///< Atlas width in pixels.
+        int height = 0;                   ///< Atlas height in pixels.
+        std::vector<uint8_t> pixels;      ///< Raw RGBA pixel data, width * height * 4 bytes.
+        std::vector<PackedImage> images;  ///< Images packed into this atlas (atlas mode). Empty in flipbook mode.
+    };
+
+    /// Per-frame pixel rect and pivot for a flipbook result.
+    struct PackedFrame {
+        moth_ui::IntRect rect;   ///< Pixel rect within the atlas (excludes padding).
+        moth_ui::IntVec2 pivot;  ///< Frame pivot point in pixels (zero for auto-generated flipbooks).
+    };
+
+    /// A single step (frame reference + duration) within a flipbook clip.
+    struct PackedClipStep {
+        int frameIndex = 0;  ///< Index into PackResult::frames.
+        int durationMs = 0;  ///< Duration of this step in milliseconds.
+    };
+
+    /// A named clip sequence in a flipbook result.
+    struct PackedClip {
+        std::string name;
+        LoopType loop = LoopType::Loop;
+        std::vector<PackedClipStep> steps;
+    };
+
+    /// Result returned by PackToMemory(). Check @c ok to distinguish success from failure;
+    /// a successful pack with all images oversized (forceOverwrite=true) produces ok=true
+    /// with an empty @c atlases vector.
+    struct PackResult {
+        bool ok = false;                  ///< True on success (including zero-atlas results when forceOverwrite is set).
+        std::vector<PackedAtlas> atlases; ///< One or more atlases (atlas mode); exactly one (flipbook mode).
+        std::vector<PackedFrame> frames;  ///< Per-frame rects/pivots (flipbook mode only; empty for atlas mode).
+        std::vector<PackedClip>  clips;   ///< Named clips (flipbook mode only; empty for atlas mode).
     };
 
     /// @brief Collect images from a text file containing one image path per line.
@@ -67,10 +136,10 @@ namespace moth_packer {
                                      bool recursive,
                                      std::vector<ImageDetails>& dstList);
 
-    /// Options controlling atlas generation.
+    /// Options controlling atlas/flipbook generation.
     /// @note `outputPath` and `filename` are required — Pack() will return false if either is empty.
     struct PackOptions {
-        std::filesystem::path outputPath;           ///< Directory where atlas PNGs and the JSON descriptor are written.
+        std::filesystem::path outputPath;           ///< Directory where output files are written.
         std::string filename;                       ///< Base name for output files (no extension).
         bool forceOverwrite = false;                ///< Overwrite existing output files without error.
         bool dryRun = false;                        ///< Run the full packing pipeline but do not write any files.
@@ -79,50 +148,71 @@ namespace moth_packer {
         int maxWidth = 4096;                        ///< Maximum atlas width (rounded up to the next power of two).
         int maxHeight = 4096;                       ///< Maximum atlas height (rounded up to the next power of two).
         int padding = 0;                            ///< Pixels of padding added around each image on all sides.
-        PaddingType paddingType = PaddingType::Color; ///< How the padding border pixels are filled (Color is a no-op; the atlas background handles it).
-        uint32_t paddingColor = 0;                  ///< Atlas background color as RRGGBBAA. Applied to the entire atlas before compositing, so it fills padding regions and any unpacked areas.
+        PaddingType paddingType = PaddingType::Color; ///< How the padding border pixels are filled.
+        uint32_t paddingColor = 0;                  ///< Atlas background color as RRGGBBAA.
         bool prettyJson = false;                    ///< Pretty-print the JSON descriptor with 4-space indentation.
-        bool absolutePaths = false;                 ///< Write absolute paths in the JSON descriptor instead of paths relative to outputPath.
+        bool absolutePaths = false;                 ///< Write absolute paths in the JSON descriptor.
         AtlasFormat format = AtlasFormat::PNG;      ///< Output image format for atlas files.
-        int jpegQuality = 90;                       ///< JPEG encode quality (1–100). Only used when format is AtlasFormat::JPEG.
+        int jpegQuality = 90;                       ///< JPEG encode quality (1–100).
+
+        /// Selects what kind of output to produce.
+        PackType packType = PackType::Atlas;
+
+        /// Flipbook options — only used when packType == PackType::Flipbook.
+        int fps = 12;                          ///< Frames per second for the default clip.
+        LoopType loop = LoopType::Loop;        ///< Loop behavior for the default clip.
+        std::string clipName = "default";      ///< Name of the auto-generated clip.
     };
 
-    /// @brief Pack images into one or more texture atlases.
+    /// @brief Pack images into one or more atlases (or a single flipbook atlas) entirely in memory.
     ///
-    /// Images are sorted into the smallest power-of-two atlas that achieves the
-    /// best area utilisation. If all images do not fit in a single atlas, multiple
-    /// atlases are produced. Each atlas is written as a PNG alongside a shared JSON
-    /// descriptor listing every atlas and the rect of each packed image within it.
+    /// This is the core packing function. Pack(ImageDetails, PackOptions) is a convenience wrapper
+    /// that loads images from disk, calls PackToMemory, then writes the resulting pixels and JSON
+    /// descriptor to the output directory.
+    ///
+    /// When `options.packType == PackType::Atlas`:
+    ///   Images are bin-packed into the smallest power-of-two atlas that achieves the best area
+    ///   utilisation. Multiple atlases are produced if needed. Each atlas in the result contains
+    ///   the composited pixel data and a list of packed images with their rects.
+    ///
+    /// When `options.packType == PackType::Flipbook`:
+    ///   Images are sorted alphabetically by name and bin-packed into a single atlas. The result
+    ///   contains one atlas, a `frames` array with per-frame rects and pivots, and a `clips` array
+    ///   with a single auto-generated clip covering all frames in order. Returns an empty result if
+    ///   not all images fit into one atlas — increase `maxWidth`/`maxHeight` in that case.
+    ///
+    /// `options.outputPath` and `options.filename` are not used by this function.
+    ///
+    /// @param images  Images to pack. Each must have a valid name, positive dimensions, and a
+    ///                pixels vector of exactly `width * height * 4` bytes (RGBA).
+    /// @param options Packing configuration.
+    /// @return A PackResult. Check @c PackResult::ok for success; do NOT use @c atlases.empty()
+    ///         as the success predicate. When @c forceOverwrite is set and every image exceeds
+    ///         the maximum atlas dimensions, @c ok is @c true with an empty @c atlases vector.
+    PackResult PackToMemory(std::vector<ImageInput> images, PackOptions const& options);
+
+    /// @brief Pack images into one or more texture atlases, or a single flipbook atlas.
+    ///
+    /// Loads images from disk, calls PackToMemory, then writes the resulting atlas images
+    /// and JSON descriptor to `options.outputPath`.
+    ///
+    /// When `options.packType == PackType::Atlas`:
+    ///   Images are sorted into the smallest power-of-two atlas that achieves the best area
+    ///   utilisation. Multiple atlases are produced if needed. The JSON descriptor lists every
+    ///   atlas and the rect of each packed image within it.
+    ///
+    /// When `options.packType == PackType::Flipbook`:
+    ///   Images are sorted alphabetically by filename (so frames can be named 001.png, 002.png,
+    ///   etc.) and bin-packed into a single atlas. The JSON descriptor uses the new flipbook
+    ///   format: a `frames` array with per-frame rects and pivots, and a `clips` array with a
+    ///   single auto-generated clip covering all frames in order. Returns false if not all images
+    ///   fit into one atlas — increase `maxWidth`/`maxHeight` in that case.
     ///
     /// @param images  Images to pack. Passed by value; the caller's list is unmodified.
     /// @param options Packing configuration.
-    /// @return True when packing completes and (when not a dry run) output files are written
-    ///         successfully. Oversized images are skipped with a warning but do not cause failure.
-    ///         Returns false only on fatal errors such as an empty image list, invalid PackOptions,
-    ///         an image that fails to load during compositing, or a file-write failure.
-    bool Pack(std::vector<ImageDetails> images, PackOptions const& options);
-
-    /// @deprecated Use Pack(images, PackOptions) instead. This overload will be removed in a future version.
-    inline bool Pack(std::vector<ImageDetails> images,
-                     std::filesystem::path outputPath,
-                     std::string filename,
-                     bool forceOverwrite = false,
-                     bool dryRun = false,
-                     int minWidth = 256,
-                     int minHeight = 256,
-                     int maxWidth = 4096,
-                     int maxHeight = 4096) {
-        PackOptions opts;
-        opts.outputPath    = std::move(outputPath);
-        opts.filename      = std::move(filename);
-        opts.forceOverwrite = forceOverwrite;
-        opts.dryRun        = dryRun;
-        opts.minWidth      = minWidth;
-        opts.minHeight     = minHeight;
-        opts.maxWidth      = maxWidth;
-        opts.maxHeight     = maxHeight;
-        return Pack(std::move(images), opts);
-    }
+    /// @return True on success. False on fatal errors such as an empty image list, invalid options,
+    ///         a load/write failure, or (flipbook only) images that do not fit in a single atlas.
+    bool Pack(std::vector<ImageDetails> imageDetails, PackOptions const& options);
 
     /// Options controlling sprite extraction from a sheet image.
     struct UnpackOptions {
@@ -175,44 +265,5 @@ namespace moth_packer {
     /// @return True if all detected sprites were written successfully (or dryRun is true).
     ///         Returns false on load failure, invalid options, or any write error.
     bool Unpack(std::filesystem::path const& sheetPath, UnpackOptions const& options);
-
-    /// Loop behavior for a flipbook clip.
-    enum class LoopType {
-        Loop,   ///< Jump back to Start and keep playing indefinitely.
-        Stop,   ///< Freeze on the End frame and fire EventFlipbookStopped.
-        Reset,  ///< Rewind to Start, freeze, and fire EventFlipbookStopped.
-    };
-
-    /// Options controlling flipbook sheet generation.
-    struct FlipbookOptions {
-        std::filesystem::path outputPath;           ///< Directory where the atlas and JSON descriptor are written.
-        std::string filename;                       ///< Base name for output files (no extension).
-        bool forceOverwrite = false;                ///< Overwrite existing output files without error.
-        bool dryRun = false;                        ///< Run the full pipeline but do not write any files.
-        bool prettyJson = false;                    ///< Pretty-print the JSON descriptor with 4-space indentation.
-        bool absolutePaths = false;                 ///< Write absolute paths in the JSON descriptor instead of paths relative to outputPath.
-        AtlasFormat format = AtlasFormat::PNG;      ///< Output image format for the atlas.
-        int jpegQuality = 90;                       ///< JPEG encode quality (1–100). Only used when format is AtlasFormat::JPEG.
-        int fps = 12;                               ///< Frames per second for the default clip.
-        LoopType loop = LoopType::Loop;             ///< Loop behavior for the default clip.
-        int frameWidth = 0;                         ///< Fixed frame width in pixels. 0 = derive from the largest input image.
-        int frameHeight = 0;                        ///< Fixed frame height in pixels. 0 = derive from the largest input image.
-        bool strict = false;                        ///< If true, oversized frames and atlas size violations cause errors instead of warnings.
-        int maxAtlasWidth = 0;                      ///< Maximum atlas width in pixels. 0 = no limit.
-        int maxAtlasHeight = 0;                     ///< Maximum atlas height in pixels. 0 = no limit.
-        uint32_t paddingColor = 0;                  ///< Atlas background fill color as RRGGBBAA. Applied to every pixel before frames are composited.
-    };
-
-    /// @brief Pack images into a uniform-grid flipbook sheet and write a JSON descriptor.
-    ///
-    /// Images are sorted alphabetically by filename and placed in a roughly-square grid,
-    /// each frame centred in a cell of the maximum input image dimensions. A single default
-    /// clip covering all frames is written to the descriptor.
-    ///
-    /// @param images  Images to pack. Passed by value; the caller's list is unmodified.
-    /// @param options Flipbook configuration.
-    /// @return True when packing completes and (when not a dry run) output files are written
-    ///         successfully. Returns false on fatal errors.
-    bool Flipbook(std::vector<ImageDetails> images, FlipbookOptions const& options);
 
 } // namespace moth_packer

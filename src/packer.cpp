@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -169,23 +170,20 @@ namespace moth_packer {
             return std::begin(testDimensions)->m_dimensions;
         }
 
-        // Composites packed rects into an atlas image and returns the atlas JSON entry for the descriptor.
-        // Erases successfully packed rects from the list. Returns an empty JSON object on failure.
-        nlohmann::json CommitPack(std::filesystem::path const& atlasImagePath,
-                                  std::filesystem::path const& outputPath,
-                                  bool dryRun,
-                                  int width,
-                                  int height,
-                                  std::vector<stbrp_rect>& rects,
-                                  std::vector<ImageDetails> const& images,
-                                  int padding,
-                                  PaddingType paddingType,
-                                  uint32_t paddingColor,
-                                  bool absolutePaths,
-                                  AtlasFormat format,
-                                  int jpegQuality) {
+        // Composites packed rects from in-memory ImageInput pixels into a PackedAtlas.
+        // Erases successfully packed rects from the list.
+        PackedAtlas CommitPackCore(int width,
+                                   int height,
+                                   std::vector<stbrp_rect>& rects,
+                                   std::vector<ImageInput> const& images,
+                                   int padding,
+                                   PaddingType paddingType,
+                                   uint32_t paddingColor) {
             int const atlasChannels = 4;
-            std::vector<uint8_t> atlasPixels(static_cast<size_t>(width) * height * atlasChannels);
+            PackedAtlas atlas;
+            atlas.width = width;
+            atlas.height = height;
+            atlas.pixels.resize(static_cast<size_t>(width) * height * atlasChannels);
 
             // Pre-fill the entire atlas with paddingColor. This sets the background color
             // for the atlas (visible in padding regions and any unpacked areas) and makes
@@ -194,29 +192,22 @@ namespace moth_packer {
             uint8_t const bg_g = static_cast<uint8_t>((paddingColor >> 16) & 0xFF);
             uint8_t const bg_b = static_cast<uint8_t>((paddingColor >> 8) & 0xFF);
             uint8_t const bg_a = static_cast<uint8_t>(paddingColor & 0xFF);
-            for (size_t i = 0; i < atlasPixels.size(); i += atlasChannels) {
-                atlasPixels[i + 0] = bg_r;
-                atlasPixels[i + 1] = bg_g;
-                atlasPixels[i + 2] = bg_b;
-                atlasPixels[i + 3] = bg_a;
+            for (size_t i = 0; i < atlas.pixels.size(); i += atlasChannels) {
+                atlas.pixels[i + 0] = bg_r;
+                atlas.pixels[i + 1] = bg_g;
+                atlas.pixels[i + 2] = bg_b;
+                atlas.pixels[i + 3] = bg_a;
             }
 
-            nlohmann::json atlasImages;
             for (auto&& rect : rects) {
                 if (rect.was_packed == 0) {
                     continue;
                 }
 
-                auto const& imagePath = images[rect.id].path;
-                int srcWidth = 0;
-                int srcHeight = 0;
-                int srcChannels = 0;
-                stbi_uc* srcPixels =
-                    stbi_load(imagePath.string().c_str(), &srcWidth, &srcHeight, &srcChannels, atlasChannels);
-                if (srcPixels == nullptr) {
-                    spdlog::error("Failed to load image for packing: {}", imagePath.string());
-                    return {};
-                }
+                auto const& img = images[static_cast<size_t>(rect.id)];
+                int const srcWidth  = img.width;
+                int const srcHeight = img.height;
+                uint8_t const* srcPixels = img.pixels.data();
 
                 int const dstX = rect.x + padding;
                 int const dstY = rect.y + padding;
@@ -225,14 +216,14 @@ namespace moth_packer {
                 for (int row = 0; row < srcHeight; ++row) {
                     auto const srcOffset = static_cast<size_t>(row) * srcWidth * atlasChannels;
                     auto const dstOffset = (static_cast<size_t>(dstY + row) * width + dstX) * atlasChannels;
-                    std::memcpy(atlasPixels.data() + dstOffset,
+                    std::memcpy(atlas.pixels.data() + dstOffset,
                                 srcPixels + srcOffset,
                                 static_cast<size_t>(srcWidth) * atlasChannels);
                 }
 
                 // Fill padding border
                 if (padding > 0) {
-                    auto const srcPixelAt = [&](int sx, int sy) -> stbi_uc const* {
+                    auto const srcPixelAt = [&](int sx, int sy) -> uint8_t const* {
                         return srcPixels + (((static_cast<size_t>(sy) * srcWidth) + sx) * atlasChannels);
                     };
                     for (int py = rect.y; py < rect.y + rect.h; ++py) {
@@ -251,7 +242,7 @@ namespace moth_packer {
                                 int const csx = std::clamp(sx, 0, srcWidth - 1);
                                 int const csy = std::clamp(sy, 0, srcHeight - 1);
                                 std::memcpy(
-                                    atlasPixels.data() + dstOffset, srcPixelAt(csx, csy), atlasChannels);
+                                    atlas.pixels.data() + dstOffset, srcPixelAt(csx, csy), atlasChannels);
                                 break;
                             }
                             case PaddingType::Mirror: {
@@ -262,7 +253,7 @@ namespace moth_packer {
                                     c = ((c % period) + period) % period;
                                     return c >= size ? period - c - 1 : c;
                                 };
-                                std::memcpy(atlasPixels.data() + dstOffset,
+                                std::memcpy(atlas.pixels.data() + dstOffset,
                                             srcPixelAt(mirrorCoord(sx, srcWidth), mirrorCoord(sy, srcHeight)),
                                             atlasChannels);
                                 break;
@@ -271,7 +262,7 @@ namespace moth_packer {
                                 int const wsx = ((sx % srcWidth) + srcWidth) % srcWidth;
                                 int const wsy = ((sy % srcHeight) + srcHeight) % srcHeight;
                                 std::memcpy(
-                                    atlasPixels.data() + dstOffset, srcPixelAt(wsx, wsy), atlasChannels);
+                                    atlas.pixels.data() + dstOffset, srcPixelAt(wsx, wsy), atlasChannels);
                                 break;
                             }
                             }
@@ -279,54 +270,65 @@ namespace moth_packer {
                     }
                 }
 
-                stbi_image_free(srcPixels);
-
-                nlohmann::json details;
-                auto const recordedPath = absolutePaths ? std::filesystem::absolute(imagePath)
-                                                        : std::filesystem::relative(imagePath, outputPath);
-                details["path"] = recordedPath.string();
-                details["rect"] = { { "x", dstX }, { "y", dstY }, { "w", srcWidth }, { "h", srcHeight } };
-                atlasImages.push_back(details);
-                spdlog::info("Packed {} into {}", recordedPath.string(), atlasImagePath.string());
-            }
-
-            if (!dryRun) {
-                auto const pathStr = atlasImagePath.string();
-                auto const* path = pathStr.c_str();
-                int writeResult = 0;
-                switch (format) {
-                case AtlasFormat::PNG:
-                    writeResult = stbi_write_png(path, width, height, atlasChannels,
-                                                 atlasPixels.data(), width * atlasChannels);
-                    break;
-                case AtlasFormat::BMP:
-                    writeResult = stbi_write_bmp(path, width, height, atlasChannels, atlasPixels.data());
-                    break;
-                case AtlasFormat::TGA:
-                    writeResult = stbi_write_tga(path, width, height, atlasChannels, atlasPixels.data());
-                    break;
-                case AtlasFormat::JPEG:
-                    writeResult = stbi_write_jpg(path, width, height, atlasChannels,
-                                                 atlasPixels.data(), jpegQuality);
-                    break;
-                }
-                if (writeResult == 0) {
-                    spdlog::error("Failed to write atlas image: {}", atlasImagePath.string());
-                    return {};
-                }
+                atlas.images.push_back(PackedImage{
+                    img.name,
+                    moth_ui::MakeRect(dstX, dstY, srcWidth, srcHeight)
+                });
             }
 
             rects.erase(ranges::remove_if(rects, [](auto const& r) { return r.was_packed != 0; }),
                         std::end(rects));
 
-            nlohmann::json atlasEntry;
-            atlasEntry["atlas"] = absolutePaths
-                                      ? std::filesystem::absolute(atlasImagePath).string()
-                                      : std::filesystem::relative(atlasImagePath, outputPath).string();
-            atlasEntry["images"] = atlasImages;
-            return atlasEntry;
+            return atlas;
         }
-    }
+
+        // Writes a PackedAtlas pixel buffer to disk in the requested format.
+        // Returns true on success (or when dryRun is true).
+        bool WriteAtlasImage(std::filesystem::path const& path,
+                             PackedAtlas const& atlas,
+                             bool dryRun,
+                             AtlasFormat format,
+                             int jpegQuality) {
+            if (dryRun) {
+                return true;
+            }
+            int const channels = 4;
+            auto const pathStr = path.string();
+            int writeResult = 0;
+            switch (format) {
+            case AtlasFormat::PNG:
+                writeResult = stbi_write_png(pathStr.c_str(), atlas.width, atlas.height, channels,
+                                             atlas.pixels.data(), atlas.width * channels);
+                break;
+            case AtlasFormat::BMP:
+                writeResult = stbi_write_bmp(pathStr.c_str(), atlas.width, atlas.height, channels,
+                                             atlas.pixels.data());
+                break;
+            case AtlasFormat::TGA:
+                writeResult = stbi_write_tga(pathStr.c_str(), atlas.width, atlas.height, channels,
+                                             atlas.pixels.data());
+                break;
+            case AtlasFormat::JPEG:
+                writeResult = stbi_write_jpg(pathStr.c_str(), atlas.width, atlas.height, channels,
+                                             atlas.pixels.data(), jpegQuality);
+                break;
+            }
+            if (writeResult == 0) {
+                spdlog::error("Failed to write atlas image: {}", path.string());
+                return false;
+            }
+            return true;
+        }
+
+        std::string LoopTypeStr(LoopType t) {
+            switch (t) {
+            case LoopType::Loop:  return "loop";
+            case LoopType::Stop:  return "stop";
+            case LoopType::Reset: return "reset";
+            default:              return "loop";
+            }
+        }
+    } // anonymous namespace
 
     bool CollectImagesFromFile(std::filesystem::path const& inputList, std::vector<ImageDetails>& dstList) {
         if (!std::filesystem::exists(inputList)) {
@@ -523,8 +525,193 @@ namespace moth_packer {
         return true;
     }
 
-    bool Pack(std::vector<ImageDetails> images, PackOptions const& options) {
+    PackResult PackToMemory(std::vector<ImageInput> images, PackOptions const& options) {
         if (images.empty()) {
+            spdlog::error("No images to pack!");
+            return {};
+        }
+        if (options.padding < 0) {
+            spdlog::error("PackOptions::padding must be non-negative (got {})", options.padding);
+            return {};
+        }
+        if (options.minWidth <= 0 || options.minHeight <= 0) {
+            spdlog::error("PackOptions::minWidth/minHeight must be positive");
+            return {};
+        }
+        if (options.maxWidth <= 0 || options.maxHeight <= 0) {
+            spdlog::error("PackOptions::maxWidth/maxHeight must be positive");
+            return {};
+        }
+        if (options.maxWidth < options.minWidth || options.maxHeight < options.minHeight) {
+            spdlog::error("PackOptions::maxWidth/maxHeight must be >= minWidth/minHeight");
+            return {};
+        }
+        if (options.format == AtlasFormat::JPEG &&
+            (options.jpegQuality < 1 || options.jpegQuality > 100)) {
+            spdlog::error("PackOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
+            return {};
+        }
+        // Guard against overflow in maxWidth*2 (stbNodes) and unrealistic atlas sizes.
+        constexpr int kMaxAtlasDim = 65536;
+        if (options.maxWidth > kMaxAtlasDim || options.maxHeight > kMaxAtlasDim) {
+            spdlog::error("PackOptions::maxWidth/maxHeight must not exceed {}", kMaxAtlasDim);
+            return {};
+        }
+
+        for (auto const& img : images) {
+            if (img.width <= 0 || img.height <= 0) {
+                spdlog::error("ImageInput '{}' has invalid dimensions ({}x{})", img.name, img.width, img.height);
+                return {};
+            }
+            auto const expectedSize = static_cast<size_t>(img.width) * img.height * 4;
+            if (img.pixels.size() != expectedSize) {
+                spdlog::error("ImageInput '{}' pixel data size mismatch (got {}, expected {})",
+                              img.name, img.pixels.size(), expectedSize);
+                return {};
+            }
+        }
+
+        // ---- Flipbook path ----
+        if (options.packType == PackType::Flipbook) {
+            if (options.fps <= 0) {
+                spdlog::error("PackOptions::fps must be positive for flipbook output (got {})", options.fps);
+                return {};
+            }
+
+            // Sort alphabetically by the filename component of the name so frames can be
+            // numbered: 001.png, 002.png, etc. Using the filename component rather than the
+            // full name means directory prefixes (when Pack() builds names from full paths)
+            // do not affect ordering.
+            std::sort(images.begin(), images.end(), [](ImageInput const& a, ImageInput const& b) {
+                auto const fa = std::filesystem::path(a.name).filename();
+                auto const fb = std::filesystem::path(b.name).filename();
+                return fa != fb ? fa < fb : a.name < b.name;
+            });
+
+            std::vector<stbrp_rect> stbRects;
+            stbRects.reserve(images.size());
+            for (int i = 0; i < static_cast<int>(images.size()); ++i) {
+                stbrp_rect r;
+                r.id = i;
+                r.w = images[i].width + (options.padding * 2);
+                r.h = images[i].height + (options.padding * 2);
+                stbRects.push_back(r);
+            }
+
+            std::vector<stbrp_node> stbNodes(options.maxWidth * 2);
+            auto const packDim = FindOptimalDimensions(stbNodes, stbRects,
+                                                        { options.minWidth, options.minHeight },
+                                                        { options.maxWidth, options.maxHeight });
+
+            stbrp_context stbContext;
+            stbrp_init_target(&stbContext, packDim.x, packDim.y,
+                              stbNodes.data(), static_cast<int>(stbNodes.size()));
+            stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
+
+            // All frames must fit in a single atlas for a valid flipbook.
+            for (auto const& r : stbRects) {
+                if (r.was_packed == 0) {
+                    spdlog::error("Flipbook: '{}' could not be packed into a single atlas "
+                                  "(try increasing maxWidth/maxHeight)",
+                                  images[static_cast<size_t>(r.id)].name);
+                    return {};
+                }
+            }
+
+            // Capture per-frame rects before CommitPackCore erases them.
+            std::vector<PackedFrame> frames(images.size());
+            for (auto const& r : stbRects) {
+                auto const idx = static_cast<size_t>(r.id);
+                frames[idx].rect = moth_ui::MakeRect(r.x + options.padding, r.y + options.padding,
+                                                      images[idx].width, images[idx].height);
+                // pivot stays zero-initialised
+            }
+
+            // CommitPackCore erases packed rects — pass a copy so stbRects stays valid above.
+            auto rectsForCommit = stbRects;
+            auto atlas = CommitPackCore(packDim.x, packDim.y, rectsForCommit, images,
+                                        options.padding, options.paddingType, options.paddingColor);
+            // In flipbook mode frame data lives in PackResult::frames, not atlas.images.
+            atlas.images.clear();
+
+            // Distribute frame durations using Bresenham error accumulation so the sum of all
+            // step durations equals round(frameCount * 1000.0 / fps), preserving average
+            // playback speed even when 1000 is not evenly divisible by fps.
+            double const exactMs = 1000.0 / options.fps;
+            PackedClip clip;
+            clip.name = options.clipName.empty() ? "default" : options.clipName;
+            clip.loop = options.loop;
+            clip.steps.reserve(images.size());
+            double durationError = 0.0;
+            for (int i = 0; i < static_cast<int>(images.size()); ++i) {
+                double const target = exactMs + durationError;
+                int const durationMs = static_cast<int>(std::round(target));
+                durationError = target - durationMs;
+                clip.steps.push_back({ i, durationMs });
+            }
+
+            PackResult result;
+            result.ok = true;
+            result.atlases.push_back(std::move(atlas));
+            result.frames = std::move(frames);
+            result.clips.push_back(std::move(clip));
+
+            spdlog::info("Packed flipbook: {} frames, {}x{} px",
+                         result.frames.size(), packDim.x, packDim.y);
+            return result;
+        }
+
+        // ---- Atlas path ----
+        std::vector<stbrp_rect> stbRects;
+        stbRects.reserve(images.size());
+        for (int i = 0; i < static_cast<int>(images.size()); ++i) {
+            stbrp_rect r;
+            r.id = i;
+            r.w = images[i].width + (options.padding * 2);
+            r.h = images[i].height + (options.padding * 2);
+            if (r.w <= options.maxWidth && r.h <= options.maxHeight) {
+                stbRects.push_back(r);
+            } else {
+                spdlog::warn("Image '{}' exceeds max atlas size, skipping", images[i].name);
+            }
+        }
+
+        if (stbRects.empty()) {
+            if (options.forceOverwrite) {
+                spdlog::warn("No images could be packed (all images exceeded max atlas dimensions); continuing due to --force");
+                PackResult result;
+                result.ok = true;
+                return result;
+            }
+            spdlog::error("No images could be packed (all images exceeded max atlas dimensions)");
+            return {};
+        }
+
+        std::vector<stbrp_node> stbNodes(options.maxWidth * 2);
+        PackResult result;
+
+        while (!stbRects.empty()) {
+            auto const packDim = FindOptimalDimensions(stbNodes, stbRects,
+                                                        { options.minWidth, options.minHeight },
+                                                        { options.maxWidth, options.maxHeight });
+
+            stbrp_context stbContext;
+            stbrp_init_target(&stbContext, packDim.x, packDim.y,
+                              stbNodes.data(), static_cast<int>(stbNodes.size()));
+            stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
+
+            result.atlases.push_back(CommitPackCore(packDim.x, packDim.y, stbRects, images,
+                                                     options.padding, options.paddingType, options.paddingColor));
+        }
+
+        result.ok = true;
+        spdlog::info("Packed {} images into {} atlas{}",
+                     images.size(), result.atlases.size(), result.atlases.size() > 1 ? "es" : "");
+        return result;
+    }
+
+    bool Pack(std::vector<ImageDetails> imageDetails, PackOptions const& options) {
+        if (imageDetails.empty()) {
             spdlog::error("No images to pack!");
             return false;
         }
@@ -532,31 +719,32 @@ namespace moth_packer {
             spdlog::error("PackOptions::filename must not be empty");
             return false;
         }
-        if (options.padding < 0) {
-            spdlog::error("PackOptions::padding must be non-negative (got {})", options.padding);
-            return false;
+
+        // Load all images from disk into in-memory pixel buffers.
+        constexpr int kChannels = 4;
+        std::vector<ImageInput> inputs;
+        inputs.reserve(imageDetails.size());
+        for (auto const& detail : imageDetails) {
+            int srcWidth = 0;
+            int srcHeight = 0;
+            int srcChannels = 0;
+            stbi_uc* pixels = stbi_load(detail.path.string().c_str(), &srcWidth, &srcHeight, &srcChannels, kChannels);
+            if (pixels == nullptr) {
+                spdlog::error("Failed to load image: {}", detail.path.string());
+                return false;
+            }
+            ImageInput input;
+            input.name = detail.path.string();
+            input.width = srcWidth;
+            input.height = srcHeight;
+            auto const pixelCount = static_cast<size_t>(srcWidth) * srcHeight * kChannels;
+            input.pixels.assign(pixels, pixels + pixelCount);
+            stbi_image_free(pixels);
+            inputs.push_back(std::move(input));
         }
-        if (options.minWidth <= 0 || options.minHeight <= 0) {
-            spdlog::error("PackOptions::minWidth/minHeight must be positive");
-            return false;
-        }
-        if (options.maxWidth <= 0 || options.maxHeight <= 0) {
-            spdlog::error("PackOptions::maxWidth/maxHeight must be positive");
-            return false;
-        }
-        if (options.maxWidth < options.minWidth || options.maxHeight < options.minHeight) {
-            spdlog::error("PackOptions::maxWidth/maxHeight must be >= minWidth/minHeight");
-            return false;
-        }
-        if (options.format == AtlasFormat::JPEG &&
-            (options.jpegQuality < 1 || options.jpegQuality > 100)) {
-            spdlog::error("PackOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
-            return false;
-        }
-        // Guard against overflow in maxWidth*2 (stbNodes) and unrealistic atlas sizes.
-        constexpr int kMaxAtlasDim = 65536;
-        if (options.maxWidth > kMaxAtlasDim || options.maxHeight > kMaxAtlasDim) {
-            spdlog::error("PackOptions::maxWidth/maxHeight must not exceed {}", kMaxAtlasDim);
+
+        auto result = PackToMemory(std::move(inputs), options);
+        if (!result.ok) {
             return false;
         }
 
@@ -570,77 +758,135 @@ namespace moth_packer {
             }
         }
 
-        std::vector<stbrp_rect> stbRects;
-        stbRects.reserve(images.size());
-        int i = 0;
-        for (auto&& image : images) {
-            stbrp_rect r;
-            r.id = i;
-            r.w = image.dimensions.x + (options.padding * 2);
-            r.h = image.dimensions.y + (options.padding * 2);
-            if (r.w <= options.maxWidth && r.h <= options.maxHeight) {
-                stbRects.push_back(r);
-            } else {
-                spdlog::warn("Image {} exceeds max atlas size, skipping", image.path.string());
-            }
-            ++i;
-        }
+        std::string const ext = FormatExtension(options.format);
 
-        if (stbRects.empty()) {
+        // ---- Flipbook path ----
+        if (options.packType == PackType::Flipbook) {
+            auto const atlasPath = options.outputPath / (options.filename + ext);
+            auto const jsonPath  = options.outputPath / (options.filename + ".flipbook.json");
+
             if (!options.forceOverwrite) {
-                spdlog::error("No images could be packed (all images exceeded max atlas dimensions)");
+                if (std::filesystem::exists(atlasPath)) {
+                    spdlog::error("Output already exists (use --force to overwrite): {}", atlasPath.string());
+                    return false;
+                }
+                if (std::filesystem::exists(jsonPath)) {
+                    spdlog::error("Output already exists (use --force to overwrite): {}", jsonPath.string());
+                    return false;
+                }
+            }
+
+            if (!WriteAtlasImage(atlasPath, result.atlases[0], options.dryRun, options.format, options.jpegQuality)) {
                 return false;
             }
-            spdlog::warn("No images could be packed (all images exceeded max atlas dimensions); continuing due to --force");
+
+            auto const recordedAtlas = options.absolutePaths
+                ? std::filesystem::absolute(atlasPath).string()
+                : std::filesystem::relative(atlasPath, options.outputPath).string();
+
+            nlohmann::json j;
+            j["image"]  = recordedAtlas;
+            j["frames"] = nlohmann::json::array();
+            for (auto const& frame : result.frames) {
+                nlohmann::json frameJson;
+                frameJson["x"]       = frame.rect.x();
+                frameJson["y"]       = frame.rect.y();
+                frameJson["w"]       = frame.rect.w();
+                frameJson["h"]       = frame.rect.h();
+                frameJson["pivot_x"] = frame.pivot.x;
+                frameJson["pivot_y"] = frame.pivot.y;
+                j["frames"].push_back(frameJson);
+            }
+
+            j["clips"] = nlohmann::json::array();
+            for (auto const& clip : result.clips) {
+                nlohmann::json clipJson;
+                clipJson["name"]   = clip.name;
+                clipJson["loop"]   = LoopTypeStr(clip.loop);
+                clipJson["frames"] = nlohmann::json::array();
+                for (auto const& step : clip.steps) {
+                    nlohmann::json stepJson;
+                    stepJson["frame"]       = step.frameIndex;
+                    stepJson["duration_ms"] = step.durationMs;
+                    clipJson["frames"].push_back(stepJson);
+                }
+                j["clips"].push_back(clipJson);
+            }
+
+            if (!options.dryRun) {
+                std::ofstream out(jsonPath);
+                if (!out.is_open()) {
+                    spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                    return false;
+                }
+                out << (options.prettyJson ? j.dump(4) : j.dump());
+                out.flush();
+                if (!out) {
+                    spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                    return false;
+                }
+            }
+
+            spdlog::info("Wrote flipbook: {} ({} frames, {}x{} px)",
+                         jsonPath.string(), result.frames.size(),
+                         result.atlases[0].width, result.atlases[0].height);
+            return true;
         }
 
+        // ---- Atlas path ----
         auto const packDetailsPath = options.outputPath / fmt::format("{}.json", options.filename);
         if (!options.forceOverwrite && std::filesystem::exists(packDetailsPath)) {
             spdlog::error("Destination exists: {}", packDetailsPath.string());
             return false;
         }
 
-        std::vector<stbrp_node> stbNodes(options.maxWidth * 2);
-
-        nlohmann::json atlases;
-        int numPacks = 0;
-        for (; !stbRects.empty(); ++numPacks) {
-            auto const atlasImagePath =
-                options.outputPath / fmt::format("{}_{}{}", options.filename, numPacks, FormatExtension(options.format));
-
-            if (!options.forceOverwrite && std::filesystem::exists(atlasImagePath)) {
-                // previously an error, but downgraded to a warning since we still continue.
-                spdlog::warn("Destination exists: {}", atlasImagePath.string());
-                continue;
+        // Preflight: check all atlas image paths for conflicts before writing any file.
+        if (!options.forceOverwrite) {
+            for (size_t atlasIdx = 0; atlasIdx < result.atlases.size(); ++atlasIdx) {
+                auto const atlasImagePath =
+                    options.outputPath / fmt::format("{}_{}{}", options.filename, atlasIdx, ext);
+                if (std::filesystem::exists(atlasImagePath)) {
+                    spdlog::error("Output already exists (use --force to overwrite): {}", atlasImagePath.string());
+                    return false;
+                }
             }
+        }
 
-            auto const packDim = FindOptimalDimensions(stbNodes,
-                                                       stbRects,
-                                                       { options.minWidth, options.minHeight },
-                                                       { options.maxWidth, options.maxHeight });
+        nlohmann::json atlases = nlohmann::json::array();
+        for (size_t atlasIdx = 0; atlasIdx < result.atlases.size(); ++atlasIdx) {
+            auto const& atlas = result.atlases[atlasIdx];
+            auto const atlasImagePath =
+                options.outputPath / fmt::format("{}_{}{}", options.filename, atlasIdx, ext);
 
-            stbrp_context stbContext;
-            stbrp_init_target(
-                &stbContext, packDim.x, packDim.y, stbNodes.data(), static_cast<int>(stbNodes.size()));
-            stbrp_pack_rects(&stbContext, stbRects.data(), static_cast<int>(stbRects.size()));
-            auto const atlasJson = CommitPack(atlasImagePath,
-                                              options.outputPath,
-                                              options.dryRun,
-                                              packDim.x,
-                                              packDim.y,
-                                              stbRects,
-                                              images,
-                                              options.padding,
-                                              options.paddingType,
-                                              options.paddingColor,
-                                              options.absolutePaths,
-                                              options.format,
-                                              options.jpegQuality);
-            if (atlasJson.empty()) {
-                // empty return from commit pack means something bad happened
+            if (!WriteAtlasImage(atlasImagePath, atlas, options.dryRun, options.format, options.jpegQuality)) {
                 return false;
             }
-            atlases.push_back(atlasJson);
+
+            nlohmann::json atlasEntry;
+            atlasEntry["atlas"] = (options.absolutePaths
+                ? std::filesystem::absolute(atlasImagePath)
+                : std::filesystem::relative(atlasImagePath, options.outputPath)).string();
+
+            nlohmann::json atlasImages;
+            for (auto const& img : atlas.images) {
+                auto const imagePath = std::filesystem::path(img.name);
+                auto recordedPath = options.absolutePaths
+                    ? std::filesystem::absolute(imagePath)
+                    : std::filesystem::relative(imagePath, options.outputPath);
+                if (recordedPath.empty()) {
+                    recordedPath = std::filesystem::absolute(imagePath);
+                }
+                nlohmann::json details;
+                details["path"] = recordedPath.string();
+                details["rect"] = {
+                    { "x", img.rect.x() }, { "y", img.rect.y() },
+                    { "w", img.rect.w() }, { "h", img.rect.h() }
+                };
+                atlasImages.push_back(details);
+                spdlog::info("Packed {} into {}", recordedPath.string(), atlasImagePath.string());
+            }
+            atlasEntry["images"] = atlasImages;
+            atlases.push_back(atlasEntry);
         }
 
         if (!options.dryRun) {
@@ -659,8 +905,8 @@ namespace moth_packer {
             }
         }
 
-        spdlog::info("Packed {} images into {} atlas{}", images.size(), numPacks, numPacks > 1 ? "es" : "");
-
+        spdlog::info("Packed {} images into {} atlas{}",
+                     imageDetails.size(), result.atlases.size(), result.atlases.size() > 1 ? "es" : "");
         return true;
     }
 
@@ -918,261 +1164,4 @@ namespace moth_packer {
         return success;
     }
 
-    bool Flipbook(std::vector<ImageDetails> images, FlipbookOptions const& options) {
-        if (images.empty()) {
-            spdlog::error("No images to pack into flipbook");
-            return false;
-        }
-        if (options.outputPath.empty() || options.filename.empty()) {
-            spdlog::error("outputPath and filename are required for flipbook output");
-            return false;
-        }
-        if (options.fps <= 0) {
-            spdlog::error("FlipbookOptions::fps must be positive (got {})", options.fps);
-            return false;
-        }
-        if (options.frameWidth < 0) {
-            spdlog::error("FlipbookOptions::frameWidth must be non-negative (got {})", options.frameWidth);
-            return false;
-        }
-        if (options.frameHeight < 0) {
-            spdlog::error("FlipbookOptions::frameHeight must be non-negative (got {})", options.frameHeight);
-            return false;
-        }
-        if (options.maxAtlasWidth <= 0 || options.maxAtlasHeight <= 0) {
-            spdlog::error("FlipbookOptions::maxAtlasWidth/maxAtlasHeight must be positive (got {}x{})",
-                          options.maxAtlasWidth, options.maxAtlasHeight);
-            return false;
-        }
-        if (options.format == AtlasFormat::JPEG &&
-            (options.jpegQuality < 1 || options.jpegQuality > 100)) {
-            spdlog::error("FlipbookOptions::jpegQuality must be in the range 1-100 (got {})", options.jpegQuality);
-            return false;
-        }
-
-        // Sort frames alphabetically by filename so artists can name them 001.png, 002.png, etc.
-        std::sort(images.begin(), images.end(), [](ImageDetails const& a, ImageDetails const& b) {
-            return a.path.filename() < b.path.filename();
-        });
-
-        // Determine frame dimensions: use explicit size if provided, otherwise derive from largest input.
-        // Each dimension is resolved independently so a partial --frame-size (e.g. width only) is valid.
-        int frameW = options.frameWidth;
-        int frameH = options.frameHeight;
-        for (auto const& img : images) {
-            if (options.frameWidth <= 0) {
-                frameW = std::max(frameW, img.dimensions.x);
-            }
-            if (options.frameHeight <= 0) {
-                frameH = std::max(frameH, img.dimensions.y);
-            }
-        }
-
-        if (frameW <= 0 || frameH <= 0) {
-            spdlog::error("Could not determine valid frame dimensions (frameW={}, frameH={})", frameW, frameH);
-            return false;
-        }
-
-        int const frameCount = static_cast<int>(images.size());
-        int const cols = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(frameCount)))));
-        int const rows = (frameCount + cols - 1) / cols;
-        int const atlasW = cols * frameW;
-        int const atlasH = rows * frameH;
-
-        constexpr int kMaxAtlasDim = 65536;
-        if (atlasW > kMaxAtlasDim || atlasH > kMaxAtlasDim) {
-            spdlog::error("Flipbook atlas dimensions ({}x{}) exceed maximum allowed ({})",
-                          atlasW, atlasH, kMaxAtlasDim);
-            return false;
-        }
-
-        if ((options.maxAtlasWidth > 0 && atlasW > options.maxAtlasWidth) ||
-            (options.maxAtlasHeight > 0 && atlasH > options.maxAtlasHeight)) {
-            if (options.strict) {
-                spdlog::error("Flipbook atlas ({}x{}) exceeds max dimensions ({}x{})",
-                              atlasW, atlasH, options.maxAtlasWidth, options.maxAtlasHeight);
-                return false;
-            }
-            spdlog::warn("Flipbook atlas ({}x{}) exceeds max dimensions ({}x{})",
-                         atlasW, atlasH, options.maxAtlasWidth, options.maxAtlasHeight);
-        }
-
-        // Check for existing outputs.
-        std::string const ext = FormatExtension(options.format);
-        auto const atlasPath = options.outputPath / (options.filename + ext);
-        auto const jsonPath  = options.outputPath / (options.filename + ".flipbook.json");
-        if (!options.forceOverwrite) {
-            if (std::filesystem::exists(atlasPath)) {
-                spdlog::error("Output already exists (use --force to overwrite): {}", atlasPath.string());
-                return false;
-            }
-            if (std::filesystem::exists(jsonPath)) {
-                spdlog::error("Output already exists (use --force to overwrite): {}", jsonPath.string());
-                return false;
-            }
-        }
-
-        int const kChannels = 4;
-        std::vector<uint8_t> atlasPixels(static_cast<size_t>(atlasW) * atlasH * kChannels);
-        {
-            uint8_t const bg_r = static_cast<uint8_t>((options.paddingColor >> 24) & 0xFF);
-            uint8_t const bg_g = static_cast<uint8_t>((options.paddingColor >> 16) & 0xFF);
-            uint8_t const bg_b = static_cast<uint8_t>((options.paddingColor >>  8) & 0xFF);
-            uint8_t const bg_a = static_cast<uint8_t>( options.paddingColor        & 0xFF);
-            for (size_t i = 0; i < atlasPixels.size(); i += kChannels) {
-                atlasPixels[i + 0] = bg_r;
-                atlasPixels[i + 1] = bg_g;
-                atlasPixels[i + 2] = bg_b;
-                atlasPixels[i + 3] = bg_a;
-            }
-        }
-
-        if (options.strict) {
-            bool anyOversized = false;
-            for (int i = 0; i < frameCount; ++i) {
-                auto const& img = images[i];
-                if (img.dimensions.x > frameW || img.dimensions.y > frameH) {
-                    spdlog::error("Frame {} ({}x{}) exceeds frame size {}x{}: {}",
-                                  i, img.dimensions.x, img.dimensions.y, frameW, frameH,
-                                  img.path.string());
-                    anyOversized = true;
-                }
-            }
-            if (anyOversized) {
-                return false;
-            }
-        }
-
-        if (!options.dryRun) {
-            try {
-                std::filesystem::create_directories(options.outputPath);
-            } catch (std::filesystem::filesystem_error const& e) {
-                spdlog::error("Failed to create output directory '{}': {}",
-                              options.outputPath.string(), e.what());
-                return false;
-            }
-        }
-
-        for (int i = 0; i < frameCount; ++i) {
-            auto const& imgPath = images[i].path;
-            int srcW = 0;
-            int srcH = 0;
-            int srcCh = 0;
-            stbi_uc* src = stbi_load(imgPath.string().c_str(), &srcW, &srcH, &srcCh, kChannels);
-            if (src == nullptr) {
-                spdlog::error("Failed to load frame image: {}", imgPath.string());
-                return false;
-            }
-
-            if (srcW > frameW || srcH > frameH) {
-                spdlog::warn("Frame {} ({}x{}) exceeds frame size {}x{}, cropping: {}",
-                             i, srcW, srcH, frameW, frameH, imgPath.string());
-            }
-
-            int const col   = i % cols;
-            int const row   = i / cols;
-            int const cellX = col * frameW;
-            int const cellY = row * frameH;
-            // Center the image within its cell, then clamp to the cell boundary for cropping.
-            int const dstX  = cellX + ((frameW - srcW) / 2);
-            int const dstY  = cellY + ((frameH - srcH) / 2);
-
-            int const blitX0 = std::max(dstX, cellX);
-            int const blitY0 = std::max(dstY, cellY);
-            int const blitX1 = std::min(dstX + srcW, cellX + frameW);
-            int const blitY1 = std::min(dstY + srcH, cellY + frameH);
-
-            for (int y = blitY0; y < blitY1; ++y) {
-                int const srcY   = y - dstY;
-                int const srcX   = blitX0 - dstX;
-                int const blitW  = blitX1 - blitX0;
-                auto const srcOff = (static_cast<size_t>(srcY) * srcW + srcX) * kChannels;
-                auto const dstOff = (static_cast<size_t>(y) * atlasW + blitX0) * kChannels;
-                std::memcpy(atlasPixels.data() + dstOff, src + srcOff,
-                            static_cast<size_t>(blitW) * kChannels);
-            }
-
-            stbi_image_free(src);
-            spdlog::info("Frame {}: {}", i, imgPath.string());
-        }
-
-        if (!options.dryRun) {
-            auto const pathStr = atlasPath.string();
-            auto const* pathCStr = pathStr.c_str();
-            int writeResult = 0;
-            switch (options.format) {
-            case AtlasFormat::PNG:
-                writeResult = stbi_write_png(pathCStr, atlasW, atlasH, kChannels,
-                                             atlasPixels.data(), atlasW * kChannels);
-                break;
-            case AtlasFormat::BMP:
-                writeResult = stbi_write_bmp(pathCStr, atlasW, atlasH, kChannels, atlasPixels.data());
-                break;
-            case AtlasFormat::TGA:
-                writeResult = stbi_write_tga(pathCStr, atlasW, atlasH, kChannels, atlasPixels.data());
-                break;
-            case AtlasFormat::JPEG:
-                writeResult = stbi_write_jpg(pathCStr, atlasW, atlasH, kChannels,
-                                             atlasPixels.data(), options.jpegQuality);
-                break;
-            default:
-                spdlog::warn("Unknown AtlasFormat value; defaulting to PNG");
-                writeResult = stbi_write_png(pathCStr, atlasW, atlasH, kChannels,
-                                             atlasPixels.data(), atlasW * kChannels);
-                break;
-            }
-            if (writeResult == 0) {
-                spdlog::error("Failed to write flipbook atlas: {}", atlasPath.string());
-                return false;
-            }
-        }
-
-        auto const loopStr = [](LoopType t) -> std::string {
-            switch (t) {
-            case LoopType::Loop:  return "loop";
-            case LoopType::Stop:  return "stop";
-            case LoopType::Reset: return "reset";
-            default:              return "loop";
-            }
-        }(options.loop);
-
-        auto const recordedAtlas = options.absolutePaths
-            ? std::filesystem::absolute(atlasPath).string()
-            : std::filesystem::relative(atlasPath, options.outputPath).string();
-
-        nlohmann::json j;
-        j["image"]       = recordedAtlas;
-        j["frame_width"]  = frameW;
-        j["frame_height"] = frameH;
-        j["frame_cols"]   = cols;
-        j["frame_rows"]   = rows;
-        j["max_frames"]   = frameCount;
-        j["clips"]        = nlohmann::json::array();
-
-        nlohmann::json clip;
-        clip["name"]  = "default";
-        clip["start"] = 0;
-        clip["end"]   = frameCount - 1;
-        clip["fps"]   = options.fps;
-        clip["loop"]  = loopStr;
-        j["clips"].push_back(clip);
-
-        if (!options.dryRun) {
-            std::ofstream out(jsonPath);
-            if (!out.is_open()) {
-                spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
-                return false;
-            }
-            out << (options.prettyJson ? j.dump(4) : j.dump());
-            out.flush();
-            if (!out) {
-                spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
-                return false;
-            }
-        }
-
-        spdlog::info("Wrote flipbook: {} ({} frames, {}x{} grid, {}x{} px)",
-                     jsonPath.string(), frameCount, cols, rows, atlasW, atlasH);
-        return true;
-    }
 } // namespace moth_packer
