@@ -55,7 +55,7 @@ AI agents (primarily Claude) are used as tools in this project for tasks such as
 moth_packer <path> [options]
 ```
 
-In **pack** mode, `<path>` is the base name for the output (no extension). The packer writes `<path>.json` and `<path>_0.<ext>`, `<path>_1.<ext>`, … to the output directory. In **unpack** mode, `<path>` is the input sprite sheet to extract from.
+In **pack** mode, `<path>` is the base name for the output (no extension). For atlas packing (default) the packer writes `<path>.json` and `<path>_0.<ext>`, `<path>_1.<ext>`, … to the output directory. For flipbook packing (`--pack-type flipbook`) it writes `<path>.flipbook.json` and `<path>.<ext>` (a single atlas image). In **unpack** mode, `<path>` is the input sprite sheet to extract from.
 
 ### Modes
 

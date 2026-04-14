@@ -1,9 +1,11 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 #include <moth_ui/moth_ui.h>
 
 namespace moth_packer {
@@ -184,7 +186,9 @@ namespace moth_packer {
     /// @param images  Images to pack. Each must have a valid name, positive dimensions, and a
     ///                pixels vector of exactly `width * height * 4` bytes (RGBA).
     /// @param options Packing configuration.
-    /// @return A PackResult whose atlases vector is non-empty on success; empty on failure.
+    /// @return A PackResult. Check @c PackResult::ok for success; do NOT use @c atlases.empty()
+    ///         as the success predicate. When @c forceOverwrite is set and every image exceeds
+    ///         the maximum atlas dimensions, @c ok is @c true with an empty @c atlases vector.
     PackResult PackToMemory(std::vector<ImageInput> images, PackOptions const& options);
 
     /// @brief Pack images into one or more texture atlases, or a single flipbook atlas.

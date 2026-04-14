@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -838,16 +839,23 @@ namespace moth_packer {
             return false;
         }
 
+        // Preflight: check all atlas image paths for conflicts before writing any file.
+        if (!options.forceOverwrite) {
+            for (size_t atlasIdx = 0; atlasIdx < result.atlases.size(); ++atlasIdx) {
+                auto const atlasImagePath =
+                    options.outputPath / fmt::format("{}_{}{}", options.filename, atlasIdx, ext);
+                if (std::filesystem::exists(atlasImagePath)) {
+                    spdlog::error("Output already exists (use --force to overwrite): {}", atlasImagePath.string());
+                    return false;
+                }
+            }
+        }
+
         nlohmann::json atlases;
         for (size_t atlasIdx = 0; atlasIdx < result.atlases.size(); ++atlasIdx) {
             auto const& atlas = result.atlases[atlasIdx];
             auto const atlasImagePath =
                 options.outputPath / fmt::format("{}_{}{}", options.filename, atlasIdx, ext);
-
-            if (!options.forceOverwrite && std::filesystem::exists(atlasImagePath)) {
-                spdlog::error("Output already exists (use --force to overwrite): {}", atlasImagePath.string());
-                return false;
-            }
 
             if (!WriteAtlasImage(atlasImagePath, atlas, options.dryRun, options.format, options.jpegQuality)) {
                 return false;
