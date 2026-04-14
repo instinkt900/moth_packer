@@ -87,8 +87,11 @@ namespace moth_packer {
         std::vector<PackedClipStep> steps;
     };
 
-    /// Result returned by PackToMemory(). A non-empty atlases vector indicates success.
+    /// Result returned by PackToMemory(). Check @c ok to distinguish success from failure;
+    /// a successful pack with all images oversized (forceOverwrite=true) produces ok=true
+    /// with an empty @c atlases vector.
     struct PackResult {
+        bool ok = false;                  ///< True on success (including zero-atlas results when forceOverwrite is set).
         std::vector<PackedAtlas> atlases; ///< One or more atlases (atlas mode); exactly one (flipbook mode).
         std::vector<PackedFrame> frames;  ///< Per-frame rects/pivots (flipbook mode only; empty for atlas mode).
         std::vector<PackedClip>  clips;   ///< Named clips (flipbook mode only; empty for atlas mode).

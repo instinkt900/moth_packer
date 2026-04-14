@@ -649,6 +649,7 @@ namespace moth_packer {
             }
 
             PackResult result;
+            result.ok = true;
             result.atlases.push_back(std::move(atlas));
             result.frames = std::move(frames);
             result.clips.push_back(std::move(clip));
@@ -674,6 +675,12 @@ namespace moth_packer {
         }
 
         if (stbRects.empty()) {
+            if (options.forceOverwrite) {
+                spdlog::warn("No images could be packed (all images exceeded max atlas dimensions); continuing due to --force");
+                PackResult result;
+                result.ok = true;
+                return result;
+            }
             spdlog::error("No images could be packed (all images exceeded max atlas dimensions)");
             return {};
         }
@@ -695,6 +702,7 @@ namespace moth_packer {
                                                      options.padding, options.paddingType, options.paddingColor));
         }
 
+        result.ok = true;
         spdlog::info("Packed {} images into {} atlas{}",
                      images.size(), result.atlases.size(), result.atlases.size() > 1 ? "es" : "");
         return result;
@@ -734,7 +742,7 @@ namespace moth_packer {
         }
 
         auto result = PackToMemory(std::move(inputs), options);
-        if (result.atlases.empty()) {
+        if (!result.ok) {
             return false;
         }
 
