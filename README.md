@@ -233,7 +233,7 @@ Paths are relative to the output directory by default. Pass `--absolute-paths` t
 
 ### Flipbook
 
-A flipbook run produces `<name>.<ext>` (the atlas image) and `<name>.flipbook.json`. The descriptor lists each packed frame with its pixel rect and pivot, and one or more named clip sequences:
+A flipbook run produces `<name>.<ext>` (the atlas image) and `<name>.flipbook.json`. The descriptor lists each packed frame with its pixel rect and pivot, and a named clip sequence:
 
 ```json
 {

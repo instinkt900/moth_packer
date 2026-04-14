@@ -583,8 +583,9 @@ namespace moth_packer {
             // full name means directory prefixes (when Pack() builds names from full paths)
             // do not affect ordering.
             std::sort(images.begin(), images.end(), [](ImageInput const& a, ImageInput const& b) {
-                return std::filesystem::path(a.name).filename() <
-                       std::filesystem::path(b.name).filename();
+                auto const fa = std::filesystem::path(a.name).filename();
+                auto const fb = std::filesystem::path(b.name).filename();
+                return fa != fb ? fa < fb : a.name < b.name;
             });
 
             std::vector<stbrp_rect> stbRects;
@@ -851,7 +852,7 @@ namespace moth_packer {
             }
         }
 
-        nlohmann::json atlases;
+        nlohmann::json atlases = nlohmann::json::array();
         for (size_t atlasIdx = 0; atlasIdx < result.atlases.size(); ++atlasIdx) {
             auto const& atlas = result.atlases[atlasIdx];
             auto const atlasImagePath =
@@ -869,9 +870,12 @@ namespace moth_packer {
             nlohmann::json atlasImages;
             for (auto const& img : atlas.images) {
                 auto const imagePath = std::filesystem::path(img.name);
-                auto const recordedPath = options.absolutePaths
+                auto recordedPath = options.absolutePaths
                     ? std::filesystem::absolute(imagePath)
                     : std::filesystem::relative(imagePath, options.outputPath);
+                if (recordedPath.empty()) {
+                    recordedPath = std::filesystem::absolute(imagePath);
+                }
                 nlohmann::json details;
                 details["path"] = recordedPath.string();
                 details["rect"] = {
