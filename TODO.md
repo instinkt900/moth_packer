@@ -1,6 +1,6 @@
 # TODO
 
-### Named Clip Metadata Input
+## Named Clip Metadata Input
 
 **Effort:** Medium
 
@@ -12,7 +12,7 @@ per-clip loop/fps settings. Closely related to the in-memory API item below.
 
 ---
 
-### Descriptor-Driven Unpack
+## Descriptor-Driven Unpack
 
 **Effort:** Medium
 
@@ -23,7 +23,7 @@ and name-preserving. Also required as a prerequisite for the Repack Flow below.
 
 ---
 
-### Repack Flow
+## Repack Flow
 
 **Effort:** Medium  
 **Depends on:** Descriptor-Driven Unpack, In-Memory Pack API (complete)

@@ -577,9 +577,13 @@ namespace moth_packer {
                 return {};
             }
 
-            // Sort alphabetically by name so frames can be numbered: 001.png, 002.png, etc.
+            // Sort alphabetically by the filename component of the name so frames can be
+            // numbered: 001.png, 002.png, etc. Using the filename component rather than the
+            // full name means directory prefixes (when Pack() builds names from full paths)
+            // do not affect ordering.
             std::sort(images.begin(), images.end(), [](ImageInput const& a, ImageInput const& b) {
-                return a.name < b.name;
+                return std::filesystem::path(a.name).filename() <
+                       std::filesystem::path(b.name).filename();
             });
 
             std::vector<stbrp_rect> stbRects;
@@ -628,12 +632,19 @@ namespace moth_packer {
             // In flipbook mode frame data lives in PackResult::frames, not atlas.images.
             atlas.images.clear();
 
-            int const durationMs = 1000 / options.fps;
+            // Distribute frame durations using Bresenham error accumulation so the sum of all
+            // step durations equals round(frameCount * 1000.0 / fps), preserving average
+            // playback speed even when 1000 is not evenly divisible by fps.
+            double const exactMs = 1000.0 / options.fps;
             PackedClip clip;
             clip.name = options.clipName.empty() ? "default" : options.clipName;
             clip.loop = options.loop;
             clip.steps.reserve(images.size());
+            double durationError = 0.0;
             for (int i = 0; i < static_cast<int>(images.size()); ++i) {
+                double const target = exactMs + durationError;
+                int const durationMs = static_cast<int>(std::round(target));
+                durationError = target - durationMs;
                 clip.steps.push_back({ i, durationMs });
             }
 
@@ -826,8 +837,8 @@ namespace moth_packer {
                 options.outputPath / fmt::format("{}_{}{}", options.filename, atlasIdx, ext);
 
             if (!options.forceOverwrite && std::filesystem::exists(atlasImagePath)) {
-                spdlog::warn("Destination exists: {}", atlasImagePath.string());
-                continue;
+                spdlog::error("Output already exists (use --force to overwrite): {}", atlasImagePath.string());
+                return false;
             }
 
             if (!WriteAtlasImage(atlasImagePath, atlas, options.dryRun, options.format, options.jpegQuality)) {
