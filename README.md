@@ -29,19 +29,11 @@ A C++17 texture atlas packer for [moth_ui](https://github.com/instinkt900/moth_u
 
 ## Features
 
-**Two modes** — `pack` bins images into one or more power-of-two atlases (pass `--pack-type flipbook` for a single bin-packed atlas with per-frame rects and a named clip sequence), and `unpack` extracts sprites from a sheet by detecting non-transparent regions.
+moth_packer is designed to prepare image assets for use with [moth_ui](https://github.com/instinkt900/moth_ui). It works in both directions: **pack** combines a collection of individual images into a single texture atlas, and **unpack** does the reverse — extracting individual sprites back out from a sheet.
 
-**Multiple input sources** — point moth_packer at a directory of images, a glob pattern, a plain text file listing image paths, a single moth_ui layout file, or a directory of layout files. Recursive directory traversal is supported for all directory-based sources.
+In **pack** mode, the output is a texture atlas and a JSON descriptor that moth_ui can load directly. For frame-based animations the output is a single atlas image paired with a `.flipbook.json` descriptor that describes per-frame rects and a named clip sequence, ready to drive a flipbook node in moth_ui.
 
-**Automatic atlas sizing** — the packer tests power-of-two atlas dimensions between configurable min and max sizes and picks the most space-efficient fit. When images don't all fit in one atlas, additional atlases are created automatically.
-
-**Single JSON descriptor** — all atlases produced in one run are described in a single `.json` file, making it straightforward to load an entire pack at runtime without enumerating files. Flipbook output (`--pack-type flipbook`) writes a `.flipbook.json` descriptor with per-frame rects, pivots, and named clip sequences.
-
-**Configurable padding** — add a pixel border around each image with four fill modes: solid color (`color`), clamp-to-edge (`extend`), mirrored reflection (`mirror`), or tiling wrap (`wrap`).
-
-**Overwrite protection** — by default the packer refuses to overwrite existing output files and treats all images being skipped (oversized) as an error. Pass `--force` to override both behaviors.
-
-**Dry run** — see what would be packed and what output files would be written without touching the filesystem.
+In **unpack** mode, connected non-background regions are detected and written out as individual sprite files — useful for splitting up an existing sprite sheet into separate assets.
 
 ### AI Disclosure
 
