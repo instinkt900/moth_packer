@@ -56,9 +56,15 @@ jobs:
           - os: windows
             runs_on: windows-latest
             configure_preset: conan-default
+            build_preset: conan-release
+            test_preset: conan-release
+            build_type: Release
           - os: linux
             runs_on: ubuntu-latest
-            configure_preset: conan-debug
+            configure_preset: conan-release
+            build_preset: conan-release
+            test_preset: conan-release
+            build_type: Release
 
     steps:
     - uses: actions/checkout@v4
@@ -76,7 +82,7 @@ jobs:
       run: |
         conan remote add artifactory ${{ vars.ARTIFACTORY_URL }} --force
         conan remote login artifactory ci -p ${{ secrets.ARTIFACTS_TOKEN }}
-        conan install . -pr ../.conan/profile -s build_type=Debug --build=missing
+        conan install . -pr ../.conan/profile -s build_type=${{ matrix.build_type }} --build=missing
         cmake --preset ${{ matrix.configure_preset }}
-        cmake --build --preset conan-debug --config Debug
-        ctest --preset conan-debug --build-config Debug --output-on-failure
+        cmake --build --preset ${{ matrix.build_preset }}
+        ctest --preset ${{ matrix.test_preset }} --output-on-failure
