@@ -3,6 +3,32 @@
 All notable changes to this project will be documented in this file.
 Entries are generated automatically from git history using [git-cliff](https://github.com/orhun/git-cliff).
 
+## [1.0.0-rc.1] - 2026-04-15
+### Features
+- Add --min-dim/--max-dim sprite size filtering for unpack mode
+- Support --padding-color background fill in flipbook mode
+- Unpack background replace and US English spelling
+- Add flipbook pack mode with bin-packed frames
+- Add PackToMemory in-memory pack API
+
+### Bug Fixes
+- Correct flipbook sort, atlas overwrite, frame durations; update docs
+- Distinguish success-with-no-atlases from failure in PackResult
+- Self-contained header, cmath include, preflight atlas paths, doc and README
+- Stable sort, empty-relative fallback, atlases JSON array, README clip count
+- Strip pre-release suffix from version before passing to CMake project()
+- Allow pre-release suffix in cliff.toml tag_pattern
+
+### Documentation
+- Update TODO with in-memory API and repack flow; mark animation redesign complete
+- Updating readme feature section
+
+### Miscellaneous
+- Fixing moth_ui dep for tests
+
+### Changes
+- Bump version to 1.0.0-rc.1
+
 ## [0.4.0] - 2026-04-03
 ### Features
 - Add --unpack command to extract sprites from a sprite sheet
