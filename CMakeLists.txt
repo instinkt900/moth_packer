@@ -5,6 +5,12 @@ string(STRIP "${MOTH_PACKER_VERSION_FULL}" MOTH_PACKER_VERSION_FULL)
 string(REGEX REPLACE "[-+].*$" "" MOTH_PACKER_VERSION "${MOTH_PACKER_VERSION_FULL}")
 
 project(moth_packer VERSION ${MOTH_PACKER_VERSION} DESCRIPTION "Texture packer library and CLI for moth_ui layouts")
+set(PROJECT_VERSION_FULL ${MOTH_PACKER_VERSION_FULL})
+
+configure_file(
+    include/moth_packer/version.h.in
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/moth_packer/version.h
+)
 
 message("Building with CMake version: ${CMAKE_VERSION}")
 

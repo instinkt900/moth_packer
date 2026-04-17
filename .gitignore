@@ -1,3 +1,4 @@
 build/
 CMakeUserPresets.json
 sprites/
+include/moth_packer/version.h

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "moth_packer/version.h"
+
 #include <array>
 #include <cstdint>
 #include <filesystem>
