@@ -248,6 +248,16 @@ namespace moth_packer {
         /// are replaced with this color (RRGGBBAA) in the output image instead of being copied
         /// from the sheet. Pass 0x00000000 to replace background with full transparency.
         std::optional<uint32_t> replaceBackgroundColor;
+
+        /// When true, write a .flipbook.json referencing the original sheet instead of
+        /// extracting individual sprite images. The fps, loop, clipName, prettyJson, and
+        /// absolutePaths fields below are only used when outputFlipbook is true.
+        bool outputFlipbook = false;
+        int fps = 12;                          ///< Frames per second for the auto-generated clip.
+        LoopType loop = LoopType::Loop;        ///< Loop behavior for the auto-generated clip.
+        std::string clipName = "default";      ///< Name of the auto-generated clip.
+        bool prettyJson = false;               ///< Pretty-print the output JSON.
+        bool absolutePaths = false;            ///< Write absolute paths in the output JSON.
     };
 
     /// @brief Extract individual sprites from a sprite sheet by detecting connected non-background regions.

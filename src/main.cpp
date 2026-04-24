@@ -61,6 +61,8 @@ struct Args {
     int fps = 12;
     moth_packer::LoopType loop = moth_packer::LoopType::Loop;
     std::string clipName = "default";
+
+    bool asFlipbook = false;
 };
 
 static bool CollectImages(Args const& args, std::vector<moth_packer::ImageDetails>& images) {
@@ -126,6 +128,14 @@ int RunUnpack(Args const& args) {
             spdlog::error("--replace-bg-color value '{}' is not a valid hex value", args.replaceBackgroundColor);
             return 1;
         }
+    }
+    opts.outputFlipbook = args.asFlipbook;
+    if (args.asFlipbook) {
+        opts.fps        = args.fps;
+        opts.loop       = args.loop;
+        opts.clipName   = args.clipName;
+        opts.prettyJson = args.prettyJson;
+        opts.absolutePaths = args.absolutePaths;
     }
     return moth_packer::Unpack(args.path, opts) ? 0 : 1;
 }
@@ -330,6 +340,12 @@ int main(int argc, char* argv[]) {
                             "Replace detected background pixels in each extracted sprite with this color, "
                             "given as an 8-digit hex RRGGBBAA value (e.g. 00000000 for full transparency). "
                             "Requires a background detection mode (--bg-color, --auto-bg, or --alpha-threshold).");
+
+    unpackGroup->add_flag("--as-flipbook", args.asFlipbook,
+                          "Write a .flipbook.json referencing the original sheet instead of extracting "
+                          "individual sprite images. The detected frame rects become the flipbook frames. "
+                          "Use --fps, --loop, and --clip-name to configure the auto-generated clip.")
+        ->default_val(false);
 
     if (argc == 1) {
         std::cout << app.help();

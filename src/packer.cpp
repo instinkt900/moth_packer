@@ -1080,6 +1080,82 @@ namespace moth_packer {
             }
         }
 
+        // ---- Flipbook output path ----
+        if (options.outputFlipbook) {
+            if (options.fps <= 0) {
+                spdlog::error("UnpackOptions::fps must be positive for flipbook output (got {})", options.fps);
+                stbi_image_free(pixels);
+                return false;
+            }
+
+            auto const jsonPath = options.outputPath / (sheetPath.stem().string() + ".flipbook.json");
+
+            if (!options.forceOverwrite && std::filesystem::exists(jsonPath)) {
+                spdlog::error("Output already exists (use --force to overwrite): {}", jsonPath.string());
+                stbi_image_free(pixels);
+                return false;
+            }
+
+            std::string const recordedImage = options.absolutePaths
+                ? std::filesystem::absolute(sheetPath).string()
+                : std::filesystem::relative(sheetPath, options.outputPath).string();
+
+            nlohmann::json j;
+            j["image"]  = recordedImage;
+            j["frames"] = nlohmann::json::array();
+            for (auto const& r : sprites) {
+                nlohmann::json frameJson;
+                frameJson["x"]       = r.x;
+                frameJson["y"]       = r.y;
+                frameJson["w"]       = r.w;
+                frameJson["h"]       = r.h;
+                frameJson["pivot_x"] = 0;
+                frameJson["pivot_y"] = 0;
+                j["frames"].push_back(frameJson);
+            }
+
+            // Distribute frame durations using Bresenham error accumulation so the average
+            // playback speed matches the requested fps even when 1000 is not divisible by fps.
+            double const exactMs = 1000.0 / options.fps;
+            double durationError = 0.0;
+            nlohmann::json clipJson;
+            clipJson["name"]   = options.clipName.empty() ? "default" : options.clipName;
+            clipJson["loop"]   = LoopTypeStr(options.loop);
+            clipJson["frames"] = nlohmann::json::array();
+            for (int i = 0; i < static_cast<int>(sprites.size()); ++i) {
+                double const target = exactMs + durationError;
+                int const durationMs = static_cast<int>(std::round(target));
+                durationError = target - durationMs;
+                nlohmann::json stepJson;
+                stepJson["frame"]       = i;
+                stepJson["duration_ms"] = durationMs;
+                clipJson["frames"].push_back(stepJson);
+            }
+            j["clips"] = nlohmann::json::array();
+            j["clips"].push_back(clipJson);
+
+            if (!options.dryRun) {
+                std::ofstream out(jsonPath);
+                if (!out.is_open()) {
+                    spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                    stbi_image_free(pixels);
+                    return false;
+                }
+                out << (options.prettyJson ? j.dump(4) : j.dump());
+                out.flush();
+                if (!out) {
+                    spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                    stbi_image_free(pixels);
+                    return false;
+                }
+            }
+
+            spdlog::info("Wrote flipbook: {} ({} frames)", jsonPath.string(), sprites.size());
+            stbi_image_free(pixels);
+            return true;
+        }
+
+        // ---- Individual sprite extraction ----
         bool success = true;
         for (size_t i = 0; i < sprites.size(); ++i) {
             auto const& r = sprites[i];
