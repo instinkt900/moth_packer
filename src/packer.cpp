@@ -7,6 +7,8 @@
 #include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
+#include <memory>
+
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include "stb_rect_pack.h"
@@ -328,6 +330,50 @@ namespace moth_packer {
             default:              return "loop";
             }
         }
+
+        std::vector<int> ComputeFrameDurations(int frameCount, double fps) {
+            std::vector<int> durations;
+            durations.reserve(frameCount);
+            double const exactMs = 1000.0 / fps;
+            double durationError = 0.0;
+            for (int i = 0; i < frameCount; ++i) {
+                double const target = exactMs + durationError;
+                int const durationMs = static_cast<int>(std::round(target));
+                durationError = target - durationMs;
+                durations.push_back(durationMs);
+            }
+            return durations;
+        }
+
+        nlohmann::json MakeClipJson(std::string const& name, LoopType loop,
+                                     int frameCount, double fps) {
+            auto const durations = ComputeFrameDurations(frameCount, fps);
+            nlohmann::json clipJson;
+            clipJson["name"]   = name;
+            clipJson["loop"]   = LoopTypeStr(loop);
+            clipJson["frames"] = nlohmann::json::array();
+            for (int i = 0; i < static_cast<int>(durations.size()); ++i) {
+                nlohmann::json stepJson;
+                stepJson["frame"]       = i;
+                stepJson["duration_ms"] = durations[i];
+                clipJson["frames"].push_back(stepJson);
+            }
+            return clipJson;
+        }
+
+        nlohmann::json ClipToJson(PackedClip const& clip) {
+            nlohmann::json clipJson;
+            clipJson["name"]   = clip.name;
+            clipJson["loop"]   = LoopTypeStr(clip.loop);
+            clipJson["frames"] = nlohmann::json::array();
+            for (auto const& step : clip.steps) {
+                nlohmann::json stepJson;
+                stepJson["frame"]       = step.frameIndex;
+                stepJson["duration_ms"] = step.durationMs;
+                clipJson["frames"].push_back(stepJson);
+            }
+            return clipJson;
+        }
     } // anonymous namespace
 
     bool CollectImagesFromFile(std::filesystem::path const& inputList, std::vector<ImageDetails>& dstList) {
@@ -637,17 +683,14 @@ namespace moth_packer {
             // Distribute frame durations using Bresenham error accumulation so the sum of all
             // step durations equals round(frameCount * 1000.0 / fps), preserving average
             // playback speed even when 1000 is not evenly divisible by fps.
-            double const exactMs = 1000.0 / options.fps;
+            auto const frameCount = static_cast<int>(images.size());
+            auto const durations = ComputeFrameDurations(frameCount, options.fps);
             PackedClip clip;
             clip.name = options.clipName.empty() ? "default" : options.clipName;
             clip.loop = options.loop;
-            clip.steps.reserve(images.size());
-            double durationError = 0.0;
-            for (int i = 0; i < static_cast<int>(images.size()); ++i) {
-                double const target = exactMs + durationError;
-                int const durationMs = static_cast<int>(std::round(target));
-                durationError = target - durationMs;
-                clip.steps.push_back({ i, durationMs });
+            clip.steps.reserve(durations.size());
+            for (int i = 0; i < static_cast<int>(durations.size()); ++i) {
+                clip.steps.push_back({ i, durations[i] });
             }
 
             PackResult result;
@@ -800,17 +843,7 @@ namespace moth_packer {
 
             j["clips"] = nlohmann::json::array();
             for (auto const& clip : result.clips) {
-                nlohmann::json clipJson;
-                clipJson["name"]   = clip.name;
-                clipJson["loop"]   = LoopTypeStr(clip.loop);
-                clipJson["frames"] = nlohmann::json::array();
-                for (auto const& step : clip.steps) {
-                    nlohmann::json stepJson;
-                    stepJson["frame"]       = step.frameIndex;
-                    stepJson["duration_ms"] = step.durationMs;
-                    clipJson["frames"].push_back(stepJson);
-                }
-                j["clips"].push_back(clipJson);
+                j["clips"].push_back(ClipToJson(clip));
             }
 
             if (!options.dryRun) {
@@ -940,6 +973,8 @@ namespace moth_packer {
             spdlog::error("Failed to load sprite sheet: {}", sheetPath.string());
             return false;
         }
+
+        std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels_guard(pixels, stbi_image_free);
 
         // Resolve which background color to use for sprite detection.
         // Priority: explicit backgroundColor > autoDetectBackground > alpha threshold.
@@ -1082,9 +1117,13 @@ namespace moth_packer {
 
         // ---- Flipbook output path ----
         if (options.outputFlipbook) {
+            if (sprites.empty()) {
+                spdlog::warn("No valid sprites detected for flipbook output; skipping descriptor.");
+                return false;
+            }
+
             if (options.fps <= 0) {
                 spdlog::error("UnpackOptions::fps must be positive for flipbook output (got {})", options.fps);
-                stbi_image_free(pixels);
                 return false;
             }
 
@@ -1092,13 +1131,19 @@ namespace moth_packer {
 
             if (!options.forceOverwrite && std::filesystem::exists(jsonPath)) {
                 spdlog::error("Output already exists (use --force to overwrite): {}", jsonPath.string());
-                stbi_image_free(pixels);
                 return false;
             }
 
-            std::string const recordedImage = options.absolutePaths
-                ? std::filesystem::absolute(sheetPath).string()
-                : std::filesystem::relative(sheetPath, options.outputPath).string();
+            std::string recordedImage;
+            if (options.absolutePaths) {
+                recordedImage = std::filesystem::absolute(sheetPath).string();
+            } else {
+                std::error_code ec;
+                auto rel = std::filesystem::relative(sheetPath, options.outputPath, ec);
+                recordedImage = (ec || rel.empty())
+                    ? std::filesystem::absolute(sheetPath).string()
+                    : rel.string();
+            }
 
             nlohmann::json j;
             j["image"]  = recordedImage;
@@ -1114,44 +1159,26 @@ namespace moth_packer {
                 j["frames"].push_back(frameJson);
             }
 
-            // Distribute frame durations using Bresenham error accumulation so the average
-            // playback speed matches the requested fps even when 1000 is not divisible by fps.
-            double const exactMs = 1000.0 / options.fps;
-            double durationError = 0.0;
-            nlohmann::json clipJson;
-            clipJson["name"]   = options.clipName.empty() ? "default" : options.clipName;
-            clipJson["loop"]   = LoopTypeStr(options.loop);
-            clipJson["frames"] = nlohmann::json::array();
-            for (int i = 0; i < static_cast<int>(sprites.size()); ++i) {
-                double const target = exactMs + durationError;
-                int const durationMs = static_cast<int>(std::round(target));
-                durationError = target - durationMs;
-                nlohmann::json stepJson;
-                stepJson["frame"]       = i;
-                stepJson["duration_ms"] = durationMs;
-                clipJson["frames"].push_back(stepJson);
-            }
             j["clips"] = nlohmann::json::array();
-            j["clips"].push_back(clipJson);
+            j["clips"].push_back(
+                MakeClipJson(options.clipName.empty() ? "default" : options.clipName,
+                             options.loop, static_cast<int>(sprites.size()), options.fps));
 
             if (!options.dryRun) {
                 std::ofstream out(jsonPath);
                 if (!out.is_open()) {
                     spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
-                    stbi_image_free(pixels);
                     return false;
                 }
                 out << (options.prettyJson ? j.dump(4) : j.dump());
                 out.flush();
                 if (!out) {
                     spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
-                    stbi_image_free(pixels);
                     return false;
                 }
             }
 
             spdlog::info("Wrote flipbook: {} ({} frames)", jsonPath.string(), sprites.size());
-            stbi_image_free(pixels);
             return true;
         }
 
@@ -1236,7 +1263,6 @@ namespace moth_packer {
             spdlog::info("Extracted sprite {} ({}x{}) to {}", i, r.w, r.h, outPath.string());
         }
 
-        stbi_image_free(pixels);
         return success;
     }
 
