@@ -26,6 +26,9 @@
 
 namespace moth_packer {
     namespace {
+        // Bounding rect of a single detected sprite (aliased from stb_pack or BFS output).
+        struct SpriteRect { int x, y, w, h; };
+
         std::unordered_set<std::string> const kSupportedExtensions = {
             ".png", ".jpg", ".jpeg", ".bmp", ".tga"
         };
@@ -374,6 +377,55 @@ namespace moth_packer {
             }
             return clipJson;
         }
+        void SortSpritesRowMajor(std::vector<SpriteRect>& sprites) {
+            if (sprites.size() <= 1) {
+                return;
+            }
+
+            // Use median height to derive a row-bucketing threshold.
+            std::vector<int> heights;
+            heights.reserve(sprites.size());
+            for (auto const& s : sprites) {
+                heights.push_back(s.h);
+            }
+            auto const mid = heights.begin() + static_cast<ptrdiff_t>(heights.size() / 2);
+            std::nth_element(heights.begin(), mid, heights.end());
+            int const medianH = *mid;
+            int const rowThreshold = std::max(1, medianH / 2);
+
+            // Sort by vertical centre so sprites in the same visual row cluster together,
+            // even when their top edges differ due to varying frame heights.
+            std::sort(sprites.begin(), sprites.end(), [](SpriteRect const& a, SpriteRect const& b) {
+                return (a.y + (a.h / 2)) < (b.y + (b.h / 2));
+            });
+
+            // Group into rows: a sprite starts a new row when its centre-y
+            // deviates from the current row baseline by more than the threshold.
+            std::vector<std::vector<SpriteRect>> rows;
+            int currentBaseline = sprites[0].y + (sprites[0].h / 2);
+            rows.push_back({ sprites[0] });
+
+            for (size_t i = 1; i < sprites.size(); ++i) {
+                int const centreY = sprites[i].y + (sprites[i].h / 2);
+                if (std::abs(centreY - currentBaseline) > rowThreshold) {
+                    currentBaseline = centreY;
+                    rows.push_back({ sprites[i] });
+                } else {
+                    rows.back().push_back(sprites[i]);
+                }
+            }
+
+            // Sort each row left-to-right then flatten.
+            sprites.clear();
+            for (auto& row : rows) {
+                std::sort(row.begin(), row.end(),
+                          [](SpriteRect const& a, SpriteRect const& b) { return a.x < b.x; });
+                sprites.insert(sprites.end(),
+                               std::make_move_iterator(row.begin()),
+                               std::make_move_iterator(row.end()));
+            }
+        }
+
     } // anonymous namespace
 
     bool CollectImagesFromFile(std::filesystem::path const& inputList, std::vector<ImageDetails>& dstList) {
@@ -1037,7 +1089,6 @@ namespace moth_packer {
             return pixels[base + 3] > options.alphaThreshold;
         };
 
-        struct SpriteRect { int x, y, w, h; };
         std::vector<SpriteRect> sprites;
 
         // All 8 neighbors: cardinal (N/S/E/W) + diagonal.
@@ -1114,6 +1165,8 @@ namespace moth_packer {
                              filtered, filtered != 1 ? "s" : "");
             }
         }
+
+        SortSpritesRowMajor(sprites);
 
         // ---- Flipbook output path ----
         if (options.outputFlipbook) {
