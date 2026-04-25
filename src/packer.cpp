@@ -7,6 +7,8 @@
 #include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
+#include <memory>
+
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include "stb_rect_pack.h"
@@ -24,6 +26,9 @@
 
 namespace moth_packer {
     namespace {
+        // Bounding rect of a single detected sprite (aliased from stb_pack or BFS output).
+        struct SpriteRect { int x, y, w, h; };
+
         std::unordered_set<std::string> const kSupportedExtensions = {
             ".png", ".jpg", ".jpeg", ".bmp", ".tga"
         };
@@ -328,6 +333,96 @@ namespace moth_packer {
             default:              return "loop";
             }
         }
+
+        std::vector<int> ComputeFrameDurations(int frameCount, double fps) {
+            std::vector<int> durations;
+            durations.reserve(frameCount);
+            double const exactMs = 1000.0 / fps;
+            double durationError = 0.0;
+            for (int i = 0; i < frameCount; ++i) {
+                double const target = exactMs + durationError;
+                int const durationMs = static_cast<int>(std::round(target));
+                durationError = target - durationMs;
+                durations.push_back(durationMs);
+            }
+            return durations;
+        }
+
+        nlohmann::json ClipToJson(PackedClip const& clip) {
+            nlohmann::json clipJson;
+            clipJson["name"]   = clip.name;
+            clipJson["loop"]   = LoopTypeStr(clip.loop);
+            clipJson["frames"] = nlohmann::json::array();
+            for (auto const& step : clip.steps) {
+                nlohmann::json stepJson;
+                stepJson["frame"]       = step.frameIndex;
+                stepJson["duration_ms"] = step.durationMs;
+                clipJson["frames"].push_back(stepJson);
+            }
+            return clipJson;
+        }
+
+        nlohmann::json MakeClipJson(std::string const& name, LoopType loop,
+                                     int frameCount, double fps) {
+            auto const durations = ComputeFrameDurations(frameCount, fps);
+            PackedClip clip;
+            clip.name = name;
+            clip.loop = loop;
+            clip.steps.reserve(durations.size());
+            for (int i = 0; i < static_cast<int>(durations.size()); ++i) {
+                clip.steps.push_back({ i, durations[i] });
+            }
+            return ClipToJson(clip);
+        }
+        void SortSpritesRowMajor(std::vector<SpriteRect>& sprites) {
+            if (sprites.size() <= 1) {
+                return;
+            }
+
+            // Use median height to derive a row-bucketing threshold.
+            std::vector<int> heights;
+            heights.reserve(sprites.size());
+            for (auto const& s : sprites) {
+                heights.push_back(s.h);
+            }
+            auto const mid = heights.begin() + static_cast<ptrdiff_t>(heights.size() / 2);
+            std::nth_element(heights.begin(), mid, heights.end());
+            int const medianH = *mid;
+            int const rowThreshold = std::max(1, medianH / 2);
+
+            // Sort by vertical centre so sprites in the same visual row cluster together,
+            // even when their top edges differ due to varying frame heights.
+            std::sort(sprites.begin(), sprites.end(), [](SpriteRect const& a, SpriteRect const& b) {
+                return (a.y + (a.h / 2)) < (b.y + (b.h / 2));
+            });
+
+            // Group into rows: a sprite starts a new row when its centre-y
+            // deviates from the current row baseline by more than the threshold.
+            std::vector<std::vector<SpriteRect>> rows;
+            int currentBaseline = sprites[0].y + (sprites[0].h / 2);
+            rows.push_back({ sprites[0] });
+
+            for (size_t i = 1; i < sprites.size(); ++i) {
+                int const centreY = sprites[i].y + (sprites[i].h / 2);
+                if (std::abs(centreY - currentBaseline) > rowThreshold) {
+                    currentBaseline = centreY;
+                    rows.push_back({ sprites[i] });
+                } else {
+                    rows.back().push_back(sprites[i]);
+                }
+            }
+
+            // Sort each row left-to-right then flatten.
+            sprites.clear();
+            for (auto& row : rows) {
+                std::sort(row.begin(), row.end(),
+                          [](SpriteRect const& a, SpriteRect const& b) { return a.x < b.x; });
+                sprites.insert(sprites.end(),
+                               std::make_move_iterator(row.begin()),
+                               std::make_move_iterator(row.end()));
+            }
+        }
+
     } // anonymous namespace
 
     bool CollectImagesFromFile(std::filesystem::path const& inputList, std::vector<ImageDetails>& dstList) {
@@ -637,17 +732,14 @@ namespace moth_packer {
             // Distribute frame durations using Bresenham error accumulation so the sum of all
             // step durations equals round(frameCount * 1000.0 / fps), preserving average
             // playback speed even when 1000 is not evenly divisible by fps.
-            double const exactMs = 1000.0 / options.fps;
+            auto const frameCount = static_cast<int>(images.size());
+            auto const durations = ComputeFrameDurations(frameCount, options.fps);
             PackedClip clip;
             clip.name = options.clipName.empty() ? "default" : options.clipName;
             clip.loop = options.loop;
-            clip.steps.reserve(images.size());
-            double durationError = 0.0;
-            for (int i = 0; i < static_cast<int>(images.size()); ++i) {
-                double const target = exactMs + durationError;
-                int const durationMs = static_cast<int>(std::round(target));
-                durationError = target - durationMs;
-                clip.steps.push_back({ i, durationMs });
+            clip.steps.reserve(durations.size());
+            for (int i = 0; i < static_cast<int>(durations.size()); ++i) {
+                clip.steps.push_back({ i, durations[i] });
             }
 
             PackResult result;
@@ -800,17 +892,7 @@ namespace moth_packer {
 
             j["clips"] = nlohmann::json::array();
             for (auto const& clip : result.clips) {
-                nlohmann::json clipJson;
-                clipJson["name"]   = clip.name;
-                clipJson["loop"]   = LoopTypeStr(clip.loop);
-                clipJson["frames"] = nlohmann::json::array();
-                for (auto const& step : clip.steps) {
-                    nlohmann::json stepJson;
-                    stepJson["frame"]       = step.frameIndex;
-                    stepJson["duration_ms"] = step.durationMs;
-                    clipJson["frames"].push_back(stepJson);
-                }
-                j["clips"].push_back(clipJson);
+                j["clips"].push_back(ClipToJson(clip));
             }
 
             if (!options.dryRun) {
@@ -941,6 +1023,24 @@ namespace moth_packer {
             return false;
         }
 
+        std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels_guard(pixels, stbi_image_free);
+
+        // Validate flipbook preconditions early so we fail fast before
+        // running the expensive sprite-detection pass.
+        if (options.outputFlipbook) {
+            if (options.fps <= 0) {
+                spdlog::error("UnpackOptions::fps must be positive for flipbook output (got {})", options.fps);
+                return false;
+            }
+
+            auto const jsonPath = options.outputPath / (sheetPath.stem().string() + ".flipbook.json");
+
+            if (!options.forceOverwrite && std::filesystem::exists(jsonPath)) {
+                spdlog::error("Output already exists (use --force to overwrite): {}", jsonPath.string());
+                return false;
+            }
+        }
+
         // Resolve which background color to use for sprite detection.
         // Priority: explicit backgroundColor > autoDetectBackground > alpha threshold.
         std::optional<std::array<uint8_t, 3>> bgColor = options.backgroundColor;
@@ -1002,7 +1102,6 @@ namespace moth_packer {
             return pixels[base + 3] > options.alphaThreshold;
         };
 
-        struct SpriteRect { int x, y, w, h; };
         std::vector<SpriteRect> sprites;
 
         // All 8 neighbors: cardinal (N/S/E/W) + diagonal.
@@ -1080,6 +1179,66 @@ namespace moth_packer {
             }
         }
 
+        SortSpritesRowMajor(sprites);
+
+        // ---- Flipbook output path ----
+        if (options.outputFlipbook) {
+            if (sprites.empty()) {
+                spdlog::error("No valid sprites detected for flipbook output; skipping descriptor.");
+                return false;
+            }
+
+            auto const jsonPath = options.outputPath / (sheetPath.stem().string() + ".flipbook.json");
+
+            std::string recordedImage;
+            if (options.absolutePaths) {
+                recordedImage = std::filesystem::absolute(sheetPath).string();
+            } else {
+                std::error_code ec;
+                auto rel = std::filesystem::relative(sheetPath, options.outputPath, ec);
+                recordedImage = (ec || rel.empty())
+                    ? std::filesystem::absolute(sheetPath).string()
+                    : rel.string();
+            }
+
+            nlohmann::json j;
+            j["image"]  = recordedImage;
+            j["frames"] = nlohmann::json::array();
+            for (auto const& r : sprites) {
+                nlohmann::json frameJson;
+                frameJson["x"]       = r.x;
+                frameJson["y"]       = r.y;
+                frameJson["w"]       = r.w;
+                frameJson["h"]       = r.h;
+                frameJson["pivot_x"] = 0;
+                frameJson["pivot_y"] = 0;
+                j["frames"].push_back(frameJson);
+            }
+
+            j["clips"] = nlohmann::json::array();
+            j["clips"].push_back(
+                MakeClipJson(options.clipName.empty() ? "default" : options.clipName,
+                             options.loop, static_cast<int>(sprites.size()), options.fps));
+
+            if (!options.dryRun) {
+                std::ofstream out(jsonPath);
+                if (!out.is_open()) {
+                    spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                    return false;
+                }
+                out << (options.prettyJson ? j.dump(4) : j.dump());
+                out.flush();
+                if (!out) {
+                    spdlog::error("Failed to write flipbook descriptor: {}", jsonPath.string());
+                    return false;
+                }
+            }
+
+            spdlog::info("Wrote flipbook: {} ({} frames)", jsonPath.string(), sprites.size());
+            return true;
+        }
+
+        // ---- Individual sprite extraction ----
         bool success = true;
         for (size_t i = 0; i < sprites.size(); ++i) {
             auto const& r = sprites[i];
@@ -1160,7 +1319,6 @@ namespace moth_packer {
             spdlog::info("Extracted sprite {} ({}x{}) to {}", i, r.w, r.h, outPath.string());
         }
 
-        stbi_image_free(pixels);
         return success;
     }
 

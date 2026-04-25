@@ -6,16 +6,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Catch2 REQUIRED)
-find_package(moth_ui REQUIRED)
-find_package(range-v3 REQUIRED)
-find_package(nlohmann_json REQUIRED)
-find_package(fmt REQUIRED)
+find_package(Catch2 3 REQUIRED)
 find_package(spdlog REQUIRED)
 
+set(MOTH_PACKER_BUILD_CLI OFF CACHE BOOL "" FORCE)
+add_subdirectory(.. moth_packer)
+
 set(SOURCES
-    ../src/packer.cpp
-    ../src/stb_impl.c
     src/test_packer.cpp
     src/test_collect.cpp
 )
@@ -23,15 +20,10 @@ set(SOURCES
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/../include
     ${CMAKE_CURRENT_SOURCE_DIR}/../external/stb
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/glob
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    moth_ui::moth_ui
-    range-v3::range-v3
-    nlohmann_json::nlohmann_json
-    fmt::fmt
+    moth_packer
     spdlog::spdlog
     Catch2::Catch2WithMain
 )
