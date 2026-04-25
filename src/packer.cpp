@@ -874,7 +874,7 @@ namespace moth_packer {
 
             auto const recordedAtlas = options.absolutePaths
                 ? std::filesystem::absolute(atlasPath).string()
-                : std::filesystem::relative(atlasPath, options.outputPath).string();
+                : std::filesystem::relative(atlasPath, jsonPath.parent_path()).string();
 
             nlohmann::json j;
             j["image"]  = recordedAtlas;
@@ -947,7 +947,7 @@ namespace moth_packer {
             nlohmann::json atlasEntry;
             atlasEntry["atlas"] = (options.absolutePaths
                 ? std::filesystem::absolute(atlasImagePath)
-                : std::filesystem::relative(atlasImagePath, options.outputPath)).string();
+                : std::filesystem::relative(atlasImagePath, packDetailsPath.parent_path())).string();
 
             nlohmann::json atlasImages;
             for (auto const& img : atlas.images) {
@@ -1041,8 +1041,9 @@ namespace moth_packer {
             }
         }
 
-        // Resolve which background color to use for sprite detection.
+        // Resolve which background color to use.
         // Priority: explicit backgroundColor > autoDetectBackground > alpha threshold.
+        // This is needed for --replace-bg-color in both tiling and BFS modes.
         std::optional<std::array<uint8_t, 3>> bgColor = options.backgroundColor;
         if (!bgColor.has_value() && options.autoDetectBackground) {
             // Sample the four corners. If they agree within colorThreshold on every
@@ -1081,16 +1082,9 @@ namespace moth_packer {
             }
         }
 
-        // Sprite detection uses a BFS flood fill over the pixel grid.
-        // A pixel is "active" (part of a sprite) when it is not background:
+        // A pixel is "active" (foreground / not background) based on the active detection mode:
         //   - color mode: any RGB channel differs from bgColor by more than colorThreshold
         //   - alpha mode:  alpha channel exceeds alphaThreshold
-        // Each BFS seed finds one connected component (sprite), using
-        // 8-connectivity so diagonally touching pixels belong to the same sprite.
-        // The bounding rect of each component is recorded; pixels already
-        // visited by a previous BFS are skipped so each sprite is found once.
-        std::vector<bool> visited(static_cast<size_t>(width) * height, false);
-
         auto isActive = [&](int x, int y) -> bool {
             size_t const base = ((static_cast<size_t>(y) * width + x) * kChannels);
             if (bgColor.has_value()) {
@@ -1102,84 +1096,131 @@ namespace moth_packer {
             return pixels[base + 3] > options.alphaThreshold;
         };
 
+        // ---- Sprite extraction ----
+        // Two modes: fixed-size tiling or BFS flood-fill detection.
         std::vector<SpriteRect> sprites;
 
-        // All 8 neighbors: cardinal (N/S/E/W) + diagonal.
-        static constexpr std::array<std::pair<int, int>, 8> kNeighbors{{
-            {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
-        }};
+        if (options.fixedSpriteWidth > 0 && options.fixedSpriteHeight > 0) {
+            // -- Fixed-size tiling mode --
+            // Break the sheet into uniform tiles, extracted row-by-row.
+            // Partial tiles at the right or bottom edge are skipped.
+            int const fw = options.fixedSpriteWidth;
+            int const fh = options.fixedSpriteHeight;
 
-        // Scan top-to-bottom, left-to-right. The first unvisited active pixel
-        // seeds a BFS that consumes the entire connected component.
-        for (int sy = 0; sy < height; ++sy) {
-            for (int sx = 0; sx < width; ++sx) {
-                size_t const idx = (static_cast<size_t>(sy) * width) + sx;
-                if (visited[idx] || !isActive(sx, sy)) {
-                    continue;
-                }
-
-                // BFS: expand outward from the seed pixel, tracking the
-                // axis-aligned bounding box as we go.
-                std::queue<std::pair<int, int>> q;
-                q.push({sx, sy});
-                visited[idx] = true;
-                int minX = sx;
-                int maxX = sx;
-                int minY = sy;
-                int maxY = sy;
-
-                while (!q.empty()) {
-                    auto [cx, cy] = q.front();
-                    q.pop();
-                    minX = std::min(minX, cx);
-                    maxX = std::max(maxX, cx);
-                    minY = std::min(minY, cy);
-                    maxY = std::max(maxY, cy);
-
-                    for (auto [dx, dy] : kNeighbors) {
-                        int const nx = cx + dx;
-                        int const ny = cy + dy;
-                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
-                            continue;
-                        }
-                        size_t const nidx = (static_cast<size_t>(ny) * width) + nx;
-                        if (visited[nidx] || !isActive(nx, ny)) {
-                            continue;
-                        }
-                        visited[nidx] = true;
-                        q.push({nx, ny});
-                    }
-                }
-
-                // Convert inclusive max coords to width/height and store.
-                sprites.push_back({minX, minY, maxX - minX + 1, maxY - minY + 1});
-            }
-        }
-
-        spdlog::info("Found {} sprite{} in {}",
-                     sprites.size(),
-                     sprites.size() != 1 ? "s" : "",
-                     sheetPath.filename().string());
-
-        // Filter by size bounds if specified (0 means no bound).
-        if (options.minSpriteWidth > 0 || options.minSpriteHeight > 0 ||
-            options.maxSpriteWidth > 0 || options.maxSpriteHeight > 0) {
-            size_t const before = sprites.size();
-            sprites.erase(std::remove_if(sprites.begin(), sprites.end(), [&](SpriteRect const& r) {
-                if (options.minSpriteWidth  > 0 && r.w < options.minSpriteWidth)  { return true; }
-                if (options.minSpriteHeight > 0 && r.h < options.minSpriteHeight) { return true; }
-                if (options.maxSpriteWidth  > 0 && r.w > options.maxSpriteWidth)  { return true; }
-                if (options.maxSpriteHeight > 0 && r.h > options.maxSpriteHeight) { return true; }
+            if (fw > width || fh > height) {
+                spdlog::error("Fixed sprite size {}x{} exceeds sheet dimensions {}x{}",
+                              fw, fh, width, height);
                 return false;
-            }), sprites.end());
-            size_t const filtered = before - sprites.size();
-            if (filtered > 0) {
-                spdlog::info("Filtered out {} sprite{} outside size bounds",
-                             filtered, filtered != 1 ? "s" : "");
             }
-        }
 
-        SortSpritesRowMajor(sprites);
+            int const cols = width / fw;
+            int const rows = height / fh;
+
+            for (int row = 0; row < rows; ++row) {
+                for (int col = 0; col < cols; ++col) {
+                    sprites.push_back({col * fw, row * fh, fw, fh});
+                }
+            }
+
+            int const skippedW = width % fw;
+            int const skippedH = height % fh;
+            spdlog::info("Extracted {} tile{} at fixed size {}x{} ({} column{}, {} row{}) from {}",
+                         sprites.size(),
+                         sprites.size() != 1 ? "s" : "",
+                         fw, fh,
+                         cols, cols != 1 ? "s" : "",
+                         rows, rows != 1 ? "s" : "",
+                         sheetPath.filename().string());
+            if (skippedW > 0 || skippedH > 0) {
+                spdlog::info("Skipped {}px right and {}px bottom partial tile region",
+                             skippedW, skippedH);
+            }
+        } else {
+            // -- BFS flood-fill detection --
+
+            // Each BFS seed finds one connected component (sprite), using
+            // 8-connectivity so diagonally touching pixels belong to the same sprite.
+            // The bounding rect of each component is recorded; pixels already
+            // visited by a previous BFS are skipped so each sprite is found once.
+            std::vector<bool> visited(static_cast<size_t>(width) * height, false);
+
+            // All 8 neighbors: cardinal (N/S/E/W) + diagonal.
+            static constexpr std::array<std::pair<int, int>, 8> kNeighbors{{
+                {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+            }};
+
+            // Scan top-to-bottom, left-to-right. The first unvisited active pixel
+            // seeds a BFS that consumes the entire connected component.
+            for (int sy = 0; sy < height; ++sy) {
+                for (int sx = 0; sx < width; ++sx) {
+                    size_t const idx = (static_cast<size_t>(sy) * width) + sx;
+                    if (visited[idx] || !isActive(sx, sy)) {
+                        continue;
+                    }
+
+                    // BFS: expand outward from the seed pixel, tracking the
+                    // axis-aligned bounding box as we go.
+                    std::queue<std::pair<int, int>> q;
+                    q.push({sx, sy});
+                    visited[idx] = true;
+                    int minX = sx;
+                    int maxX = sx;
+                    int minY = sy;
+                    int maxY = sy;
+
+                    while (!q.empty()) {
+                        auto [cx, cy] = q.front();
+                        q.pop();
+                        minX = std::min(minX, cx);
+                        maxX = std::max(maxX, cx);
+                        minY = std::min(minY, cy);
+                        maxY = std::max(maxY, cy);
+
+                        for (auto [dx, dy] : kNeighbors) {
+                            int const nx = cx + dx;
+                            int const ny = cy + dy;
+                            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+                                continue;
+                            }
+                            size_t const nidx = (static_cast<size_t>(ny) * width) + nx;
+                            if (visited[nidx] || !isActive(nx, ny)) {
+                                continue;
+                            }
+                            visited[nidx] = true;
+                            q.push({nx, ny});
+                        }
+                    }
+
+                    // Convert inclusive max coords to width/height and store.
+                    sprites.push_back({minX, minY, maxX - minX + 1, maxY - minY + 1});
+                }
+            }
+
+            spdlog::info("Found {} sprite{} in {}",
+                         sprites.size(),
+                         sprites.size() != 1 ? "s" : "",
+                         sheetPath.filename().string());
+
+            // Filter by size bounds if specified (0 means no bound).
+            if (options.minSpriteWidth > 0 || options.minSpriteHeight > 0 ||
+                options.maxSpriteWidth > 0 || options.maxSpriteHeight > 0) {
+                size_t const before = sprites.size();
+                sprites.erase(std::remove_if(sprites.begin(), sprites.end(), [&](SpriteRect const& r) {
+                    if (options.minSpriteWidth  > 0 && r.w < options.minSpriteWidth)  { return true; }
+                    if (options.minSpriteHeight > 0 && r.h < options.minSpriteHeight) { return true; }
+                    if (options.maxSpriteWidth  > 0 && r.w > options.maxSpriteWidth)  { return true; }
+                    if (options.maxSpriteHeight > 0 && r.h > options.maxSpriteHeight) { return true; }
+                    return false;
+                }), sprites.end());
+                size_t const filtered = before - sprites.size();
+                if (filtered > 0) {
+                    spdlog::info("Filtered out {} sprite{} outside size bounds",
+                                 filtered, filtered != 1 ? "s" : "");
+                }
+            }
+
+            SortSpritesRowMajor(sprites);
+        }
 
         // ---- Flipbook output path ----
         if (options.outputFlipbook) {

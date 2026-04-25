@@ -48,6 +48,7 @@ struct Args {
     std::string backgroundColor;        // hex RRGGBB, empty = not set
     int colorThreshold = 10;
     std::string replaceBackgroundColor; // hex RRGGBBAA, empty = not set
+    std::pair<int, int> spriteSize{ 0, 0 };
 
     bool prettyJson = false;
     bool absolutePaths = false;
@@ -99,6 +100,8 @@ int RunUnpack(Args const& args) {
         opts.maxSpriteWidth  = args.maxDimensions.first;
         opts.maxSpriteHeight = args.maxDimensions.second;
     }
+    opts.fixedSpriteWidth  = args.spriteSize.first;
+    opts.fixedSpriteHeight = args.spriteSize.second;
     if (!args.backgroundColor.empty()) {
         if (args.backgroundColor.size() != 6) {
             spdlog::error("--bg-color must be a 6-digit hex value (e.g. FF00FF)");
@@ -157,7 +160,7 @@ int RunPack(Args const& args) {
     }
     moth_packer::PackOptions opts;
     opts.outputPath    = args.outputDir;
-    opts.filename      = args.path;
+    opts.filename      = std::filesystem::path(args.path).filename().string();
     opts.forceOverwrite = args.forceOverwrite;
     opts.dryRun        = args.dryRun;
     opts.minWidth      = args.minDimensions.first;
@@ -340,6 +343,13 @@ int main(int argc, char* argv[]) {
                             "Replace detected background pixels in each extracted sprite with this color, "
                             "given as an 8-digit hex RRGGBBAA value (e.g. 00000000 for full transparency). "
                             "Requires a background detection mode (--bg-color, --auto-bg, or --alpha-threshold).");
+
+    unpackGroup->add_option("--sprite-size", args.spriteSize,
+                            "Fixed sprite size WxH for tiling extraction (e.g. 96x96). "
+                            "When set, flood-fill detection is skipped and the sheet is broken into "
+                            "uniform tiles of this size, extracted row-by-row. "
+                            "Partial tiles at the right or bottom edge are skipped.")
+        ->delimiter('x');
 
     unpackGroup->add_flag("--as-flipbook", args.asFlipbook,
                           "Write a .flipbook.json referencing the original sheet instead of extracting "

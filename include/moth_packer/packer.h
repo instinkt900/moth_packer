@@ -244,6 +244,12 @@ namespace moth_packer {
         int maxSpriteWidth = 0;   ///< Maximum sprite width  to keep (0 = no maximum).
         int maxSpriteHeight = 0;  ///< Maximum sprite height to keep (0 = no maximum).
 
+        /// When both are > 0, skip flood-fill detection and instead tile the sheet into
+        /// uniform rectangles of this size, extracted row-by-row. Partial tiles at the
+        /// right or bottom edge (those that don't fit entirely) are skipped.
+        int fixedSpriteWidth = 0;
+        int fixedSpriteHeight = 0;
+
         /// When set, pixels identified as background within each extracted sprite's bounding rect
         /// are replaced with this color (RRGGBBAA) in the output image instead of being copied
         /// from the sheet. Pass 0x00000000 to replace background with full transparency.
