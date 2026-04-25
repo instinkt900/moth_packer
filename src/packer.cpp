@@ -348,22 +348,6 @@ namespace moth_packer {
             return durations;
         }
 
-        nlohmann::json MakeClipJson(std::string const& name, LoopType loop,
-                                     int frameCount, double fps) {
-            auto const durations = ComputeFrameDurations(frameCount, fps);
-            nlohmann::json clipJson;
-            clipJson["name"]   = name;
-            clipJson["loop"]   = LoopTypeStr(loop);
-            clipJson["frames"] = nlohmann::json::array();
-            for (int i = 0; i < static_cast<int>(durations.size()); ++i) {
-                nlohmann::json stepJson;
-                stepJson["frame"]       = i;
-                stepJson["duration_ms"] = durations[i];
-                clipJson["frames"].push_back(stepJson);
-            }
-            return clipJson;
-        }
-
         nlohmann::json ClipToJson(PackedClip const& clip) {
             nlohmann::json clipJson;
             clipJson["name"]   = clip.name;
@@ -376,6 +360,19 @@ namespace moth_packer {
                 clipJson["frames"].push_back(stepJson);
             }
             return clipJson;
+        }
+
+        nlohmann::json MakeClipJson(std::string const& name, LoopType loop,
+                                     int frameCount, double fps) {
+            auto const durations = ComputeFrameDurations(frameCount, fps);
+            PackedClip clip;
+            clip.name = name;
+            clip.loop = loop;
+            clip.steps.reserve(durations.size());
+            for (int i = 0; i < static_cast<int>(durations.size()); ++i) {
+                clip.steps.push_back({ i, durations[i] });
+            }
+            return ClipToJson(clip);
         }
         void SortSpritesRowMajor(std::vector<SpriteRect>& sprites) {
             if (sprites.size() <= 1) {
@@ -1028,6 +1025,22 @@ namespace moth_packer {
 
         std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels_guard(pixels, stbi_image_free);
 
+        // Validate flipbook preconditions early so we fail fast before
+        // running the expensive sprite-detection pass.
+        if (options.outputFlipbook) {
+            if (options.fps <= 0) {
+                spdlog::error("UnpackOptions::fps must be positive for flipbook output (got {})", options.fps);
+                return false;
+            }
+
+            auto const jsonPath = options.outputPath / (sheetPath.stem().string() + ".flipbook.json");
+
+            if (!options.forceOverwrite && std::filesystem::exists(jsonPath)) {
+                spdlog::error("Output already exists (use --force to overwrite): {}", jsonPath.string());
+                return false;
+            }
+        }
+
         // Resolve which background color to use for sprite detection.
         // Priority: explicit backgroundColor > autoDetectBackground > alpha threshold.
         std::optional<std::array<uint8_t, 3>> bgColor = options.backgroundColor;
@@ -1171,21 +1184,11 @@ namespace moth_packer {
         // ---- Flipbook output path ----
         if (options.outputFlipbook) {
             if (sprites.empty()) {
-                spdlog::warn("No valid sprites detected for flipbook output; skipping descriptor.");
-                return false;
-            }
-
-            if (options.fps <= 0) {
-                spdlog::error("UnpackOptions::fps must be positive for flipbook output (got {})", options.fps);
+                spdlog::error("No valid sprites detected for flipbook output; skipping descriptor.");
                 return false;
             }
 
             auto const jsonPath = options.outputPath / (sheetPath.stem().string() + ".flipbook.json");
-
-            if (!options.forceOverwrite && std::filesystem::exists(jsonPath)) {
-                spdlog::error("Output already exists (use --force to overwrite): {}", jsonPath.string());
-                return false;
-            }
 
             std::string recordedImage;
             if (options.absolutePaths) {
