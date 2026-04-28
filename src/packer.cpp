@@ -42,8 +42,7 @@ namespace moth_packer {
                     CollectLayouts(entry.path(), recursive, layouts);
                 } else if (entry.path().has_extension() &&
                            entry.path().extension() == moth_ui::Layout::FullExtension) {
-                    std::shared_ptr<moth_ui::Layout> layout;
-                    auto const result = moth_ui::Layout::Load(entry.path(), &layout);
+                    auto [layout, result] = moth_ui::Layout::Load(entry.path());
                     if (result == moth_ui::Layout::LoadResult::Success) {
                         layouts.push_back(layout);
                     }
@@ -576,8 +575,7 @@ namespace moth_packer {
             return false;
         }
 
-        std::shared_ptr<moth_ui::Layout> layout;
-        auto const result = moth_ui::Layout::Load(inputLayout, &layout);
+        auto [layout, result] = moth_ui::Layout::Load(inputLayout);
         if (result != moth_ui::Layout::LoadResult::Success) {
             spdlog::error("Failed to open layout: {}", inputLayout.string());
             return false;
