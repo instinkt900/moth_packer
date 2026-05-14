@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 Entries are generated automatically from git history using [git-cliff](https://github.com/orhun/git-cliff).
 
-## [1.0.0-rc.1] - 2026-04-28
+## [1.0.0-rc.1] - 2026-05-14
 ### Features
 - Add --min-dim/--max-dim sprite size filtering for unpack mode
 - Support --padding-color background fill in flipbook mode
@@ -35,6 +35,7 @@ Entries are generated automatically from git history using [git-cliff](https://g
 ### Miscellaneous
 - Fixing moth_ui dep for tests
 - Exposing version info from the api
+- Bumping moth_ui dependency
 
 ### Changes
 - Bump version to 1.0.0-rc.1
