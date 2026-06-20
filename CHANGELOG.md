@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 Entries are generated automatically from git history using [git-cliff](https://github.com/orhun/git-cliff).
 
+## [1.0.0-rc.2] - 2026-06-20
+### Miscellaneous
+- Loosen moth_ui dependency to a 1.x range
+
 ## [1.0.0-rc.1] - 2026-05-14
 ### Features
 - Add --min-dim/--max-dim sprite size filtering for unpack mode
