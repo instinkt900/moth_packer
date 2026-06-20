@@ -10,7 +10,7 @@ class MothPackerTests(ConanFile):
     def requirements(self):
         self.requires("catch2/3.13.0")
         # moth_packer dependencies (parent pulled in via add_subdirectory)
-        self.requires("moth_ui/1.0.0-rc.1")
+        self.requires("moth_ui/[>=1.0.0 <2]")
         self.requires("range-v3/[~0.12]")
         self.requires("nlohmann_json/[~3.11]")
         self.requires("fmt/[~10.2]")
