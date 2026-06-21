@@ -273,6 +273,12 @@ pip install conan
 
 **C++17 is required.** A `.conan/profile` is provided that sets `compiler.cppstd=17`. This profile is used in CI and can be used directly or as a reference when building locally.
 
+moth_packer depends on `moth_ui`, which is published to an Artifactory remote rather than Conan Center. Register the remote once before installing (it is publicly readable, so no login is required):
+
+```bash
+conan remote add moth https://artifactory.matthewcotton.net/artifactory/api/conan/conan-local
+```
+
 ### Library mode
 
 The default build produces the static library only. This is the mode used when moth_packer is consumed as a Conan package by another project.
