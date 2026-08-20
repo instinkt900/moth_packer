@@ -54,7 +54,13 @@ namespace moth_packer {
             for (auto&& childEntity : layout.m_children) {
                 if (childEntity->GetType() == moth_ui::LayoutEntityType::Image) {
                     auto& imageEntity = dynamic_cast<moth_ui::LayoutEntityImage&>(*childEntity);
-                    auto imagePath = layout.GetLoadedPath() / imageEntity.m_imagePath;
+                    // GetLoadedPath() is the layout file, so the image resolves against
+                    // the directory holding it. This used to join the file path itself,
+                    // which worked only because moth_ui made every stored image path
+                    // absolute and an absolute right side replaces the left. moth_ui
+                    // carries the identity unchanged now, so the join has to be right.
+                    auto imagePath =
+                        layout.GetLoadedPath().parent_path() / imageEntity.m_imageId.path();
                     // dont add duplicates
                     if (std::end(images) == ranges::find_if(images, [&](auto const& detail) {
                             return detail.path == imagePath;

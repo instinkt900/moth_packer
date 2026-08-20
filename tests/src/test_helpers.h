@@ -4,6 +4,7 @@
 
 #include "stb_image_write.h"
 
+#include <moth_ui/asset_id.h>
 #include <moth_ui/layout/layout.h>
 #include <moth_ui/layout/layout_entity_image.h>
 #include <moth_ui/layout/layout_rect.h>
@@ -18,6 +19,7 @@
 
 #include <atomic>
 #include <filesystem>
+#include <system_error>
 #include <stdexcept>
 
 // RAII temporary directory — created on construction, recursively deleted on destruction
@@ -69,13 +71,22 @@ inline moth_packer::PackOptions MakeTestPackOptions(std::filesystem::path const&
     return opts;
 }
 
-// Create a layout file containing image entities pointing to the given absolute image paths.
-// Image paths must be absolute so that GetLoadedPath() / m_imagePath resolves correctly.
+// Create a layout file containing image entities pointing to the given image paths.
+//
+// The identity is stored relative to the layout's own directory, which is what a layout
+// authored in moth_editor holds. This helper used to demand an absolute path, because
+// CollectImages joined the layout *file* path rather than its directory and only an
+// absolute path survived that. Both halves are fixed, so the relative case is the one
+// worth covering. A path outside the layout directory falls back to what it was given.
 inline std::filesystem::path MakeTestLayout(std::filesystem::path const& dir, std::string const& name, std::vector<std::filesystem::path> const& imagePaths) {
     moth_ui::Layout layout;
     auto const defaultRect = moth_ui::MakeDefaultLayoutRect();
     for (auto const& imagePath : imagePaths) {
-        auto entity = std::make_shared<moth_ui::LayoutEntityImage>(defaultRect, imagePath);
+        std::error_code error;
+        auto const relative = std::filesystem::relative(imagePath, dir, error);
+        auto const id = (error || relative.empty()) ? moth_ui::AssetId{ imagePath }
+                                                    : moth_ui::AssetId{ relative };
+        auto entity = std::make_shared<moth_ui::LayoutEntityImage>(defaultRect, id);
         layout.m_children.push_back(entity);
     }
     auto const layoutPath = dir / (name + moth_ui::Layout::FullExtension);
