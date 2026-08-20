@@ -20,8 +20,14 @@ class MothPacker(ConanFile):
             self.version = load(self, "version.txt").strip()
 
     def requirements(self):
-        self.requires("moth_ui/[>=1.0.0 <2]", transitive_headers=True)
+        self.requires("moth_ui/[>=1.8 <2]", transitive_headers=True)
         self.requires("spdlog/[~1.14]")
+
+        # moth_ui accepts fmt 10 through 12, because the Camina engine gets
+        # fmt 12 through a newer spdlog. spdlog 1.14 pins fmt 10.2.1, so the
+        # range floats to 12 and conflicts with that pin. Pick the one spdlog
+        # needs, which is the version this binary actually links.
+        self.requires("fmt/10.2.1", override=True)
         if self.options.build_cli:
             self.requires("cli11/2.4.2", visible=False)
 
