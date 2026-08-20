@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 Entries are generated automatically from git history using [git-cliff](https://github.com/orhun/git-cliff).
 
+## [1.0.0-rc.3] - 2026-08-20
+### Bug Fixes
+- Read the image identity a layout stores, and resolve it against the layout directory
+
+### Documentation
+- Document Artifactory remote registration for Conan
+
+### Miscellaneous
+- Require the moth_ui that carries AssetId, and bump to 1.0.0-rc.3
+
 ## [1.0.0-rc.2] - 2026-06-20
 ### Miscellaneous
 - Loosen moth_ui dependency to a 1.x range
