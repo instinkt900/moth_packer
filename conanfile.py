@@ -20,13 +20,18 @@ class MothPacker(ConanFile):
             self.version = load(self, "version.txt").strip()
 
     def requirements(self):
-        self.requires("moth_ui/[>=1.8 <2]", transitive_headers=True)
-        # The same spdlog moth_graphics and the Camina engine take, so the
-        # whole moth stack lands on one fmt. This used to be [~1.14], which
+        # spdlog first, before moth_ui. It pins one fmt exactly and moth_ui asks
+        # for a range that floats above that pin, so whichever Conan resolves
+        # first decides. Meeting moth_ui first picks the newest fmt and then
+        # conflicts with the pin. The order is the fix, not a style choice.
+        #
+        # The version is the one moth_graphics and the Camina engine take, so
+        # the whole moth stack lands on one fmt. This used to be [~1.14], which
         # pins fmt 10.2.1, and a graph holding both halves needed an
         # `fmt/10.2.1` override here to resolve at all. See
         # instinkt900/camina#392.
         self.requires("spdlog/[~1.17]")
+        self.requires("moth_ui/[>=1.8 <2]", transitive_headers=True)
         if self.options.build_cli:
             self.requires("cli11/2.4.2", visible=False)
 
