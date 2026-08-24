@@ -44,7 +44,12 @@ jobs:
     - name: Configure and build
       shell: bash
       run: |
-        conan install . -pr .conan/profile -s build_type=Release --build=missing
+        # --update on every Conan call in CI. This job restores a Conan cache
+        # keyed only on the Conan version and the OS, so it survives every
+        # dependency change. Conan resolves a version range against that cache
+        # and never asks the remote whether something newer matches, which
+        # silently pins an old version. See instinkt900/moth_editor#30.
+        conan install . -pr .conan/profile -s build_type=Release --build=missing --update
         cmake --preset ${{ matrix.configure_preset }}
         cmake --build --preset conan-release --config Release
 
@@ -82,7 +87,7 @@ jobs:
       run: |
         conan remote add artifactory ${{ vars.ARTIFACTORY_URL }} --force
         conan remote login artifactory ci -p ${{ secrets.ARTIFACTS_TOKEN }}
-        conan install . -pr ../.conan/profile -s build_type=${{ matrix.build_type }} --build=missing
+        conan install . -pr ../.conan/profile -s build_type=${{ matrix.build_type }} --build=missing --update
         cmake --preset ${{ matrix.configure_preset }}
         cmake --build --preset ${{ matrix.build_preset }}
         ctest --preset ${{ matrix.test_preset }} --output-on-failure
