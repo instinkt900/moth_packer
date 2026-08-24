@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 Entries are generated automatically from git history using [git-cliff](https://github.com/orhun/git-cliff).
 
+## [1.0.0] - 2026-08-24
+### Bug Fixes
+- Drop the fmt override and follow moth_graphics onto spdlog 1.17
+- Name spdlog before moth_ui, so the range resolves onto its pin
+
+### Changes
+- Bump version from 1.0.0-rc.3 to 1.0.0
+
 ## [1.0.0-rc.3] - 2026-08-20
 ### Bug Fixes
 - Read the image identity a layout stores, and resolve it against the layout directory
