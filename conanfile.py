@@ -21,13 +21,12 @@ class MothPacker(ConanFile):
 
     def requirements(self):
         self.requires("moth_ui/[>=1.8 <2]", transitive_headers=True)
-        self.requires("spdlog/[~1.14]")
-
-        # moth_ui accepts fmt 10 through 12, because the Camina engine gets
-        # fmt 12 through a newer spdlog. spdlog 1.14 pins fmt 10.2.1, so the
-        # range floats to 12 and conflicts with that pin. Pick the one spdlog
-        # needs, which is the version this binary actually links.
-        self.requires("fmt/10.2.1", override=True)
+        # The same spdlog moth_graphics and the Camina engine take, so the
+        # whole moth stack lands on one fmt. This used to be [~1.14], which
+        # pins fmt 10.2.1, and a graph holding both halves needed an
+        # `fmt/10.2.1` override here to resolve at all. See
+        # instinkt900/camina#392.
+        self.requires("spdlog/[~1.17]")
         if self.options.build_cli:
             self.requires("cli11/2.4.2", visible=False)
 
