@@ -1,5 +1,12 @@
 # Moth Packer
 
+> [!IMPORTANT]
+> **This repository is archived.** moth_packer now lives in [moth_toolkit](https://github.com/instinkt900/moth_toolkit): the
+> library is the [`moth::packer` module](https://github.com/instinkt900/moth_toolkit/tree/main/modules/packer), still published
+> as the `moth_packer` Conan package (2.x and later), and the command-line tool is
+> [`tools/moth_packer`](https://github.com/instinkt900/moth_toolkit/tree/main/tools/moth_packer). New work, issues and
+> releases happen there.
+
 [![Build and Test](https://github.com/instinkt900/moth_packer/actions/workflows/build-test.yml/badge.svg)](https://github.com/instinkt900/moth_packer/actions/workflows/build-test.yml)
 [![Release](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml/badge.svg)](https://github.com/instinkt900/moth_packer/actions/workflows/upload-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
